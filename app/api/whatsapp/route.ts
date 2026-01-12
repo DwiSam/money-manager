@@ -445,7 +445,7 @@ export async function POST(req: Request) {
       // Kalau bukan format cek saldo DAN bukan format transaksi -> Error
       await replyFonnte(
         sender,
-        `❌ Ngetik apa itu bos, nii kalo mau nyuruh gua!\n\nPerintah:\n- "Cek Saldo" (Semua)\n- "Cek Tagihan" (Tagihan Pending)\n- "Cek Kategori" (List Kategori)\n- "Done Wifi" (Bayar Tagihan)\n- "Keluar BNI 15000 Makanan Bakso" (Catat + Kategori)\n- "Bayar Listrik 30000 Gopay" (Bayar Tagihan)\n "Transfer BNI Mandiri 15000" (Transfer)"`
+        `❌ Ngetik apa itu bos, nii kalo mau nyuruh gua!\n\nPerintah:\n- "Saldo" (Cek Saldo)\n- "Tagihan" (List Tagihan)\n- "Kategori" (List Kategori)\n- "Keluar BNI 15000 Makanan Bakso" (Catat + Kategori)\n- "Transfer BNI Mandiri 15000" (Transfer)\n- "Masuk BNI 15000 Bakso" (Catat)\n- "Bayar Listrik 30000 Gopay" (Bayar Tagihan)\n- "Done Wifi (Bayar Tagihan)"\n- "Laporan" (Laporan Bulanan)`
       );
       return NextResponse.json({ status: "invalid_format" });
     }
@@ -528,6 +528,16 @@ export async function POST(req: Request) {
       }
 
       if (!finalKeterangan) finalKeterangan = finalKategori; // Case: "Keluar BNI 50000 Makanan" -> Ket: "Makanan"
+
+      // --- SAVE TO SHEET ---
+      await sheet.addRow({
+        Tanggal: today,
+        Tipe: data.tipe,
+        Dompet: data.dompet,
+        Jumlah: data.jumlah,
+        Keterangan: finalKeterangan,
+        Kategori: finalKategori,
+      });
 
       // --- BUDGET ALERT CHECK ---
       let warningMsg = "";
