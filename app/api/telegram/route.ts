@@ -1,7 +1,11 @@
 import { GoogleSpreadsheet } from "google-spreadsheet";
 import { JWT } from "google-auth-library";
 import { NextResponse } from "next/server";
-import { checkBudgetWarning, getMonthlyReport } from "@/lib/finance";
+import {
+  checkBudgetWarning,
+  getMonthlyReport,
+  parseAmountString,
+} from "@/lib/finance";
 
 // --- CONFIG ---
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -35,9 +39,9 @@ function parseMessage(message: string) {
     let jumlahStr = "";
     let jumlahIndex = -1;
     for (let i = 0; i < parts.length; i++) {
-      const cleaned = parts[i].replace(/[.,]/g, "");
-      if (!isNaN(Number(cleaned)) && cleaned.length > 0) {
-        jumlahStr = cleaned;
+      const amount = parseAmountString(parts[i]);
+      if (amount !== null) {
+        jumlahStr = amount.toString();
         jumlahIndex = i;
         break;
       }
@@ -69,9 +73,9 @@ function parseMessage(message: string) {
   let jumlahStr = "";
   let jumlahIndex = -1;
   for (let i = 0; i < parts.length; i++) {
-    const cleaned = parts[i].replace(/[.,]/g, "");
-    if (!isNaN(Number(cleaned)) && cleaned.length > 0) {
-      jumlahStr = cleaned;
+    const amount = parseAmountString(parts[i]);
+    if (amount !== null) {
+      jumlahStr = amount.toString();
       jumlahIndex = i;
       break;
     }
@@ -229,12 +233,15 @@ export async function POST(req: Request) {
 
     // 3. BAYAR TAGIHAN EXPENSE (VARIABLE)
     const payExpenseMatch = lowerMsg.match(
-      /^(?:bayar|lunas|done)\s+(.+?)\s+(\d+)\s+(.+)$/
+      /^(?:bayar|lunas|done)\s+(.+?)\s+([0-9.,]+[a-zA-Z]*)\s+(.+)$/
     );
 
     if (payExpenseMatch) {
       const targetName = payExpenseMatch[1].toLowerCase().trim();
-      const amount = payExpenseMatch[2];
+      const rawAmount = payExpenseMatch[2];
+      const parsedAmount = parseAmountString(rawAmount);
+
+      const amount = parsedAmount ? parsedAmount.toString() : "0";
       const walletName = payExpenseMatch[3];
 
       const doc = await getDoc();
@@ -412,7 +419,7 @@ export async function POST(req: Request) {
     if (!data) {
       await replyTelegram(
         chatId,
-        `❌ Ngetik apa itu bos, nii kalo mau nyuruh gua!\n\nPerintah:\n- "Cek Saldo" (Semua)\n- "Cek BNI" (Spesifik)\n- "Cek Kategori" (List Kategori)\n- "Keluar BNI 15000 Makanan Bakso" (Catat + Kategori)\n- "Transfer BNI Mandiri 15000" (Transfer)\n- "Masuk BNI 15000 Bakso" (Catat)\n- "Bayar Listrik 30000 Gopay" (Bayar Tagihan)\n- "Transfer BNI Mandiri 15000" (Transfer)" `
+        `❌ Ngetik apa itu bos, nii kalo mau nyuruh gua!\n\nPerintah:\n- "Saldo" (Cek Saldo)\n- "Tagihan" (List Tagihan)\n- "Kategori" (List Kategori)\n- "Keluar BNI 15000 Makanan Bakso" (Catat + Kategori)\n- "Transfer BNI Mandiri 15000" (Transfer)\n- "Masuk BNI 15000 Bakso" (Catat)\n- "Bayar Listrik 30000 Gopay" (Bayar Tagihan)\n- "Done Wifi (Bayar Tagihan)"\n- "Laporan" (Laporan Bulanan)`
       );
       return NextResponse.json({ ok: true });
     }
@@ -466,7 +473,7 @@ export async function POST(req: Request) {
       }
 
       let finalKeterangan = data.keterangan;
-      let finalKategori = "Tak Terkategori";
+      let finalKategori = "Lainnya";
 
       const parts = data.keterangan.split(" ");
       if (parts.length > 0) {
@@ -478,9 +485,7 @@ export async function POST(req: Request) {
           const matchedRow = catRows?.find(
             (r) => r.get("Kategori").toLowerCase() === candidate
           );
-          finalKategori = matchedRow
-            ? matchedRow.get("Kategori")
-            : "Tak Terkategori";
+          finalKategori = matchedRow ? matchedRow.get("Kategori") : "Lainnya";
 
           parts.shift();
           finalKeterangan = parts.join(" ");

@@ -1,5 +1,5 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Geist, Roboto_Mono } from "next/font/google"; // Changed Geist_Mono to Roboto_Mono
 import "./globals.css";
 
 const geistSans = Geist({
@@ -7,14 +7,26 @@ const geistSans = Geist({
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const robotoMono = Roboto_Mono({
+  variable: "--font-mono", // Standardize variable name to font-mono
   subsets: ["latin"],
 });
+
+export const viewport: Viewport = {
+  themeColor: "#16a34a",
+};
 
 export const metadata: Metadata = {
   title: "Money Tracker",
   description: "Kelola keuanganmu dengan mudah",
+  robots: {
+    index: false,
+    follow: false,
+  },
+  manifest: "/manifest.json",
+  icons: {
+    apple: "/icons/icon-192.png",
+  },
 };
 
 export default function RootLayout({
@@ -25,7 +37,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${robotoMono.variable} antialiased`}
       >
         {children}
       </body>

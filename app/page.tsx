@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import SummaryCard from "@/components/SummaryCard";
 import TransactionList from "@/components/TransactionList";
 import PinAccess from "@/components/PinAccess";
@@ -100,6 +100,52 @@ export default function Home() {
     }
   }, [currentMonthData.length]);
 
+  /* --- STATS CALCULATION (Dynamic per Period) --- */
+  const { statsIncome, statsExpense } = useMemo(() => {
+    let filtered = [];
+    const year = chartDate.getFullYear();
+    const month = chartDate.getMonth();
+
+    if (chartPeriod === "monthly") {
+      filtered = data.filter((item) => {
+        if (!item.tanggal) return false;
+        const d = parseDate(item.tanggal);
+        return d.getMonth() === month && d.getFullYear() === year;
+      });
+    } else if (chartPeriod === "yearly") {
+      filtered = data.filter((item) => {
+        if (!item.tanggal) return false;
+        const d = parseDate(item.tanggal);
+        return d.getFullYear() === year;
+      });
+    } else {
+      // Weekly: Last 7 days including current date
+      const endDate = new Date(chartDate);
+      const startDate = new Date(chartDate);
+      startDate.setDate(startDate.getDate() - 6);
+
+      // Reset hours to compare dates only
+      endDate.setHours(23, 59, 59, 999);
+      startDate.setHours(0, 0, 0, 0);
+
+      filtered = data.filter((item) => {
+        if (!item.tanggal) return false;
+        const d = parseDate(item.tanggal);
+        return d >= startDate && d <= endDate;
+      });
+    }
+
+    const income = filtered
+      .filter((item) => item.tipe === "Masuk" && !isTransfer(item))
+      .reduce((acc, curr) => acc + Number(curr.jumlah), 0);
+
+    const expense = filtered
+      .filter((item) => item.tipe === "Keluar" && !isTransfer(item))
+      .reduce((acc, curr) => acc + Number(curr.jumlah), 0);
+
+    return { statsIncome: income, statsExpense: expense };
+  }, [data, chartPeriod, chartDate]); // Recalculate when period/date changes
+
   const globalIncome = data
     .filter((item) => item.tipe === "Masuk" && !isTransfer(item))
     .reduce((acc, curr) => acc + Number(curr.jumlah), 0);
@@ -107,6 +153,20 @@ export default function Home() {
     .filter((item) => item.tipe === "Keluar" && !isTransfer(item))
     .reduce((acc, curr) => acc + Number(curr.jumlah), 0);
   const globalBalance = globalIncome - globalExpense;
+
+  // Dynamic Label for Stats
+  const statsLabel = useMemo(() => {
+    if (chartPeriod === "monthly") {
+      return chartDate.toLocaleDateString("id-ID", {
+        month: "long",
+        year: "numeric",
+      });
+    } else if (chartPeriod === "yearly") {
+      return chartDate.getFullYear().toString();
+    } else {
+      return "7 Hari Terakhir";
+    }
+  }, [chartPeriod, chartDate]);
 
   if (isCheckingAuth) {
     return <div className="min-h-screen bg-neutral-950" />;
@@ -211,7 +271,7 @@ export default function Home() {
                 <p className="text-blue-100 text-sm font-medium mb-1">
                   Total Saldo Aktif
                 </p>
-                <h2 className="text-3xl font-bold tracking-tight">
+                <h2 className="text-3xl font-bold font-mono tracking-tight">
                   {showSecrets
                     ? new Intl.NumberFormat("id-ID", {
                         style: "currency",
@@ -296,7 +356,7 @@ export default function Home() {
                           {wallet}
                         </span>
                       </div>
-                      <span className="font-bold text-lg text-white">
+                      <span className="font-bold font-mono text-lg text-white">
                         {showSecrets
                           ? new Intl.NumberFormat("id-ID", {
                               style: "currency",
@@ -317,14 +377,14 @@ export default function Home() {
             <>
               <div className="grid grid-cols-1 gap-4">
                 <SummaryCard
-                  title="Pemasukan (Bulan Ini)"
-                  amount={monthlyIncome}
+                  title={`Pemasukan (${statsLabel})`}
+                  amount={statsIncome}
                   type="income"
                   visible={showSecrets}
                 />
                 <SummaryCard
-                  title="Pengeluaran (Bulan Ini)"
-                  amount={monthlyExpense}
+                  title={`Pengeluaran (${statsLabel})`}
+                  amount={statsExpense}
                   type="expense"
                   visible={showSecrets}
                 />

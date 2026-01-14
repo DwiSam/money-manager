@@ -41,13 +41,26 @@ export default function BudgetSection({
       return acc;
     }
 
-    // Only Expenses (Keluar) excluding Transfers
-    if (curr.tipe !== "Keluar" || curr.keterangan?.includes("Transfer"))
+    // Only Expenses (Keluar)
+    // FIX: Only exclude if Category is explicitly "Transfer", don't rely on description
+    if (curr.tipe !== "Keluar" || curr.kategori?.toLowerCase() === "transfer")
       return acc;
 
-    const category = curr.kategori || "Lainnya";
-    if (!acc[category]) acc[category] = 0;
-    acc[category] += Number(curr.jumlah);
+    // Normalize Category (Trim + Title Case for display, or maintain strict if user prefers)
+    // Better: Normalize to lowercase for counting, then map back?
+    // Simplified: Just use the string as is but trim it.
+
+    // Matched against Budget Keys (which are also case sensitive usually)
+    // Let's rely on exact match for now but trim whitespace.
+    const category = (curr.kategori || "Lainnya").trim();
+
+    // Handle case insensitivity by finding the matching budget key
+    const budgetKey =
+      budgets.find((b) => b.kategori.toLowerCase() === category.toLowerCase())
+        ?.kategori || category;
+
+    if (!acc[budgetKey]) acc[budgetKey] = 0;
+    acc[budgetKey] += Number(curr.jumlah);
 
     return acc;
   }, {} as Record<string, number>);
@@ -97,7 +110,7 @@ export default function BudgetSection({
                 <span className="text-neutral-300 font-medium">
                   {budget.kategori}
                 </span>
-                <span className="text-neutral-400">
+                <span className="text-neutral-400 font-mono">
                   <span
                     className={
                       percentage >= 100

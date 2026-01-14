@@ -171,11 +171,19 @@ export default function TransactionForm({
           Jumlah (Rp)
         </label>
         <input
-          type="number"
+          type="text"
           placeholder="0"
-          className="w-full p-3 bg-neutral-950 border border-neutral-800 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-neutral-700"
-          value={form.jumlah}
-          onChange={(e) => setForm({ ...form, jumlah: e.target.value })}
+          className="w-full p-3 bg-neutral-950 border border-neutral-800 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-neutral-700 font-mono"
+          value={
+            form.jumlah
+              ? new Intl.NumberFormat("id-ID").format(Number(form.jumlah))
+              : ""
+          }
+          onChange={(e) => {
+            // Remove non-digit characters to get raw value
+            const rawValue = e.target.value.replace(/\D/g, "");
+            setForm({ ...form, jumlah: rawValue });
+          }}
           required
         />
       </div>

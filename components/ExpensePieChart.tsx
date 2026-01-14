@@ -125,7 +125,7 @@ export default function ExpensePieChart({
       return (
         <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3 shadow-lg">
           <p className="text-white font-medium text-sm">{payload[0].name}</p>
-          <p className="text-emerald-400 font-bold text-base">
+          <p className="text-emerald-400 font-bold font-mono text-base">
             {new Intl.NumberFormat("id-ID", {
               style: "currency",
               currency: "IDR",

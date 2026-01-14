@@ -26,7 +26,7 @@ export async function GET() {
     const data = rows.map((row) => ({
       tanggal: row.get("Tanggal"),
       keterangan: row.get("Keterangan"),
-      kategori: row.get("Kategori") || "Tak Terkategori",
+      kategori: row.get("Kategori") || "Lainnya",
       tipe: row.get("Tipe"),
       dompet: row.get("Dompet"),
       jumlah: row.get("Jumlah"),
@@ -52,7 +52,7 @@ export async function POST(req: Request) {
     const rowsToAdd = inputs.map((item) => ({
       Tanggal: item.tanggal || new Date().toLocaleDateString("id-ID"),
       Keterangan: item.keterangan,
-      Kategori: item.kategori || "Tak Terkategori", // Include Category
+      Kategori: item.kategori || "Lainnya", // Include Category
       Tipe: item.tipe,
       Dompet: item.dompet,
       Jumlah: item.jumlah,

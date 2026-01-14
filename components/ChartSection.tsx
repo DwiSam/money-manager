@@ -318,11 +318,11 @@ export default function ChartSection({
             <XAxis
               dataKey="name"
               stroke="#a3a3a3"
-              style={{ fontSize: "12px" }}
+              style={{ fontSize: "12px", fontFamily: "var(--font-mono)" }}
             />
             <YAxis
               stroke="#a3a3a3"
-              style={{ fontSize: "12px" }}
+              style={{ fontSize: "12px", fontFamily: "var(--font-mono)" }}
               tickFormatter={formatYAxis}
               width={40}
             />
@@ -332,6 +332,7 @@ export default function ChartSection({
                 border: "1px solid #404040",
                 borderRadius: "8px",
                 color: "#fff",
+                fontFamily: "var(--font-mono)",
               }}
               formatter={formatTooltip}
             />

@@ -39,7 +39,7 @@ export const checkBudgetWarning = async (
     let totalUsed = 0;
 
     transactions.forEach((t) => {
-      const tKat = (t.get("Kategori") || "Tak Terkategori").toString();
+      const tKat = (t.get("Kategori") || "Lainnya").toString();
       const tTipe = (t.get("Tipe") || "").toString();
       const tDateStr = t.get("Tanggal");
       const tAmount = Number(
@@ -166,4 +166,43 @@ export const getMonthlyReport = async (
     console.error("Report Error:", error);
     return "❌ Gagal bikin laporan bro.";
   }
+};
+
+// --- HELPER PARSE AMOUNT WITH SUFFIX ---
+export const parseAmountString = (str: string): number | null => {
+  const cleanStr = str.toLowerCase().trim();
+
+  // Regex checks for "number + suffix"
+  // Supports: 10rb, 10.5jt, 100k, 1juta
+  const match = cleanStr.match(
+    /^([0-9]+(?:[.,][0-9]+)?)\s?(k|rb|ribu|jt|juta)$/
+  );
+
+  if (match) {
+    let amountPart = match[1].replace(",", "."); // Normalized check decimal
+    let multiplier = 1;
+
+    switch (match[2]) {
+      case "k":
+      case "rb":
+      case "ribu":
+        multiplier = 1000;
+        break;
+      case "jt":
+      case "juta":
+        multiplier = 1000000;
+        break;
+    }
+
+    return Math.round(parseFloat(amountPart) * multiplier);
+  }
+
+  // Fallback: Standard parsing (remove . and , assuming integer grouping not decimal)
+  // Logic existing: 10.000 -> 10000
+  const cleanNumber = cleanStr.replace(/[.,]/g, "");
+  if (!isNaN(Number(cleanNumber)) && cleanNumber.length > 0) {
+    return Number(cleanNumber);
+  }
+
+  return null;
 };

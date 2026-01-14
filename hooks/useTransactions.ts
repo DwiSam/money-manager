@@ -22,7 +22,8 @@ export function useTransactions() {
   ) => {
     setLoading(true);
     const [year, month, day] = formData.tanggal.split("-");
-    const formattedDate = `${day}/${month}/${year}`;
+    // Fix: Remove leading zeros to match inconsistent standard (e.g. 1/1/2026 vs 01/01/2026) -> force standard 1/1/2026
+    const formattedDate = `${parseInt(day)}/${parseInt(month)}/${year}`;
 
     // Handle Transfer
     if (formData.tipe === "Transfer") {

@@ -1,7 +1,11 @@
 import { GoogleSpreadsheet } from "google-spreadsheet";
 import { JWT } from "google-auth-library";
 import { NextResponse } from "next/server";
-import { checkBudgetWarning, getMonthlyReport } from "@/lib/finance";
+import {
+  checkBudgetWarning,
+  getMonthlyReport,
+  parseAmountString,
+} from "@/lib/finance";
 
 // --- CONFIG ---
 const FONNTE_TOKEN = process.env.FONNTE_TOKEN;
@@ -35,9 +39,9 @@ function parseMessage(message: string) {
     let jumlahStr = "";
     let jumlahIndex = -1;
     for (let i = 0; i < parts.length; i++) {
-      const cleaned = parts[i].replace(/[.,]/g, "");
-      if (!isNaN(Number(cleaned)) && cleaned.length > 0) {
-        jumlahStr = cleaned;
+      const amount = parseAmountString(parts[i]);
+      if (amount !== null) {
+        jumlahStr = amount.toString();
         jumlahIndex = i;
         break;
       }
@@ -69,9 +73,9 @@ function parseMessage(message: string) {
   let jumlahStr = "";
   let jumlahIndex = -1;
   for (let i = 0; i < parts.length; i++) {
-    const cleaned = parts[i].replace(/[.,]/g, "");
-    if (!isNaN(Number(cleaned)) && cleaned.length > 0) {
-      jumlahStr = cleaned;
+    const amount = parseAmountString(parts[i]);
+    if (amount !== null) {
+      jumlahStr = amount.toString();
       jumlahIndex = i;
       break;
     }
@@ -224,14 +228,17 @@ export async function POST(req: Request) {
     }
 
     // 3. BAYAR TAGIHAN EXPENSE (VARIABLE) - PRIORITY
-    // Trigger: "Bayar Listrik 350000 Gopay"
+    // Trigger: "Bayar Listrik 350000 Gopay" or "Bayar Listrik 350rb Gopay"
     const payExpenseMatch = lowerMsg.match(
-      /^(?:bayar|lunas|done)\s+(.+?)\s+(\d+)\s+(.+)$/ // [command, nama, jumlah, wallet]
+      /^(?:bayar|lunas|done)\s+(.+?)\s+([0-9.,]+[a-zA-Z]*)\s+(.+)$/
     );
 
     if (payExpenseMatch) {
       const targetName = payExpenseMatch[1].toLowerCase().trim();
-      const amount = payExpenseMatch[2];
+      const rawAmount = payExpenseMatch[2];
+      const parsedAmount = parseAmountString(rawAmount);
+
+      const amount = parsedAmount ? parsedAmount.toString() : "0";
       const walletName = payExpenseMatch[3]; // Raw wallet name, let parser validate/capitalize later if needed or just use as is
 
       const doc = await getDoc();
@@ -503,7 +510,7 @@ export async function POST(req: Request) {
 
       // 2. Cek kata pertama dari keterangan
       let finalKeterangan = data.keterangan;
-      let finalKategori = "Tak Terkategori"; // Default fallback
+      let finalKategori = "Lainnya"; // Default fallback
 
       const parts = data.keterangan.split(" ");
       if (parts.length > 0) {
@@ -517,9 +524,7 @@ export async function POST(req: Request) {
           const matchedRow = catRows?.find(
             (r) => r.get("Kategori").toLowerCase() === candidate
           );
-          finalKategori = matchedRow
-            ? matchedRow.get("Kategori")
-            : "Tak Terkategori";
+          finalKategori = matchedRow ? matchedRow.get("Kategori") : "Lainnya";
 
           // Hapus kata pertama dari keterangan (Sisa: "Sate Padang")
           parts.shift();
@@ -553,8 +558,8 @@ export async function POST(req: Request) {
       const formattedAmount = toIDR(Number(data.jumlah));
       replyMessage =
         data.tipe === "Masuk"
-          ? `Mantap bos, tambah terus!\n\n💰 ${formattedAmount}\n📥 Dompet: ${data.dompet}\n📂 Kategori: ${finalKategori}\n📝 "${finalKeterangan}"\n\nSaldo ${data.dompet} nambah nii! 🎉`
-          : `Jajan teruss!!!\n\n💰 ${formattedAmount}\n📤 Dompet: ${data.dompet}\n📂 Kategori: ${finalKategori}\n📝 "${finalKeterangan}"\n\nSaldo ${data.dompet} lu tinggal dikit anjir.${warningMsg}`;
+          ? `Mantap bos, tambah terus!\n\n💰 ${formattedAmount}\n📥 Dompet: ${data.dompet}\n📂 Kategori: ${finalKategori}\n📝 Keterangan: ${finalKeterangan}\n\nSaldo ${data.dompet} nambah nii! 🎉`
+          : `Jajan teruss!!!\n\n💰 ${formattedAmount}\n📤 Dompet: ${data.dompet}\n📂 Kategori: ${finalKategori}\n📝 Keterangan: ${finalKeterangan}\n\nSaldo ${data.dompet} lu tinggal dikit anjir.${warningMsg}`;
     }
 
     await replyFonnte(sender, replyMessage);

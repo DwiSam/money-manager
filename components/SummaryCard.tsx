@@ -98,7 +98,7 @@ export default function SummaryCard({
       <span className="text-sm font-medium opacity-80 relative z-10">
         {title}
       </span>
-      <span className="text-xl font-bold mt-1 tracking-tight relative z-10">
+      <span className="text-xl font-bold font-mono mt-1 tracking-tight relative z-10">
         {visible ? formatRupiah(amount) : "Rp •••••••"}
       </span>
     </div>
