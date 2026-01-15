@@ -22,7 +22,7 @@ const getDoc = async () => {
 export async function GET() {
   try {
     const doc = await getDoc();
-    const sheet = doc.sheetsByTitle["Anggaran"];
+    const sheet = doc.sheetsByTitle["Tagihan"];
 
     if (!sheet) {
       return NextResponse.json([]);
@@ -31,14 +31,16 @@ export async function GET() {
     const rows = await sheet.getRows();
 
     const data = rows.map((row) => ({
-      kategori: row.get("Kategori"),
-      limit: row.get("Limit"),
+      nama: row.get("Nama"),
+      jumlah: row.get("Jumlah"),
+      tanggal: row.get("Tanggal"),
+      terakhirDibayar: row.get("TerakhirDibayar"),
     }));
 
     return NextResponse.json(data);
   } catch (error) {
-    console.error("Budget API Error:", error);
-    return NextResponse.json({ error: "Gagal ambil budget" }, { status: 500 });
+    console.error("Bills API Error:", error);
+    return NextResponse.json({ error: "Gagal ambil tagihan" }, { status: 500 });
   }
 }
 
@@ -48,12 +50,12 @@ export async function POST(req: Request) {
     const { action, ...data } = body;
     const doc = await getDoc();
 
-    // Create sheet if not exists (for first run)
-    let sheet = doc.sheetsByTitle["Anggaran"];
+    // Create sheet if not exists
+    let sheet = doc.sheetsByTitle["Tagihan"];
     if (!sheet) {
       sheet = await doc.addSheet({
-        headerValues: ["Kategori", "Limit"],
-        title: "Anggaran",
+        headerValues: ["Nama", "Jumlah", "Tanggal", "TerakhirDibayar"],
+        title: "Tagihan",
       });
     }
 
@@ -62,28 +64,33 @@ export async function POST(req: Request) {
     if (action === "create") {
       // Check duplicate
       const exists = rows.find(
-        (r) => r.get("Kategori").toLowerCase() === data.kategori.toLowerCase()
+        (r) => r.get("Nama").toLowerCase() === data.nama.toLowerCase()
       );
       if (exists) {
         return NextResponse.json(
-          { error: "Kategori sudah ada" },
+          { error: "Nama tagihan sudah ada" },
           { status: 400 }
         );
       }
-      await sheet.addRow({ Kategori: data.kategori, Limit: data.limit });
+      await sheet.addRow({
+        Nama: data.nama,
+        Jumlah: data.jumlah,
+        Tanggal: data.tanggal,
+        TerakhirDibayar: "-",
+      });
     } else if (action === "update") {
       const row = rows.find(
-        (r) =>
-          r.get("Kategori").toLowerCase() === data.oldKategori?.toLowerCase()
+        (r) => r.get("Nama").toLowerCase() === data.oldNama?.toLowerCase()
       );
       if (row) {
-        if (data.newKategori) row.set("Kategori", data.newKategori);
-        if (data.limit) row.set("Limit", data.limit);
+        if (data.newNama) row.set("Nama", data.newNama);
+        if (data.jumlah) row.set("Jumlah", data.jumlah);
+        if (data.tanggal) row.set("Tanggal", data.tanggal);
         await row.save();
       }
     } else if (action === "delete") {
       const row = rows.find(
-        (r) => r.get("Kategori").toLowerCase() === data.kategori.toLowerCase()
+        (r) => r.get("Nama").toLowerCase() === data.nama.toLowerCase()
       );
       if (row) {
         await row.delete();
@@ -92,7 +99,10 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Budget API Error:", error);
-    return NextResponse.json({ error: "Gagal update budget" }, { status: 500 });
+    console.error("Bills API Error:", error);
+    return NextResponse.json(
+      { error: "Gagal update tagihan" },
+      { status: 500 }
+    );
   }
 }

@@ -39,10 +39,45 @@ export function useBudgets() {
     fetchBudgets();
   }, [fetchBudgets]);
 
+  const addBudget = async (budget: { kategori: string; limit: string }) => {
+    await fetch("/api/budget", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "create", ...budget }),
+    });
+    await fetchBudgets();
+  };
+
+  const updateBudget = async (oldKategori: string, budget: Partial<Budget>) => {
+    await fetch("/api/budget", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "update",
+        oldKategori,
+        newKategori: budget.kategori,
+        limit: budget.limit,
+      }),
+    });
+    await fetchBudgets();
+  };
+
+  const deleteBudget = async (kategori: string) => {
+    await fetch("/api/budget", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete", kategori }),
+    });
+    await fetchBudgets();
+  };
+
   return {
     budgets,
     categories,
     loading,
     refreshBudgets: fetchBudgets,
+    addBudget,
+    updateBudget,
+    deleteBudget,
   };
 }
