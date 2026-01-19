@@ -89,7 +89,7 @@ export default function PinAccess({ onSuccess }: PinAccessProps) {
           &copy; 2025 Money Tracker by Dwi Samsiarto
         </p>
         <p className="text-center text-xs text-neutral-600 mt-8">
-          version 1.0.2
+          version 1.0.3
         </p>
       </div>
     </div>

@@ -5,6 +5,7 @@ interface SummaryCardProps {
   amount: number;
   type: "balance" | "income" | "expense";
   visible?: boolean;
+  trend?: number; // Added trend prop
 }
 
 export default function SummaryCard({
@@ -12,6 +13,7 @@ export default function SummaryCard({
   amount,
   type,
   visible = true,
+  trend,
 }: SummaryCardProps) {
   const formatRupiah = (num: number) => {
     return new Intl.NumberFormat("id-ID", {
@@ -101,6 +103,29 @@ export default function SummaryCard({
       <span className="text-xl font-bold font-mono mt-1 tracking-tight relative z-10">
         {visible ? formatRupiah(amount) : "Rp •••••••"}
       </span>
+
+      {/* Trend Indicator */}
+      {visible && trend !== undefined && (
+        <div className="flex items-center gap-1 mt-2 relative z-10">
+          <span
+            className={`text-xs font-medium px-1.5 py-0.5 rounded ${
+              trend > 0
+                ? type === "expense"
+                  ? "bg-red-500/20 text-red-400"
+                  : "bg-emerald-500/20 text-emerald-400"
+                : trend < 0
+                ? type === "expense"
+                  ? "bg-emerald-500/20 text-emerald-400"
+                  : "bg-red-500/20 text-red-400"
+                : "bg-neutral-500/20 text-neutral-400"
+            }`}
+          >
+            {trend > 0 ? "+" : ""}
+            {trend.toFixed(1)}%
+          </span>
+          <span className="text-xs text-neutral-500">vs bulan lalu</span>
+        </div>
+      )}
     </div>
   );
 }

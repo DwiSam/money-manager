@@ -1,29 +1,36 @@
-# Setup Auto-Debit (Recurring Transactions)
+# Setup Auto Debit
 
-## Google Sheets Configuration
+This guide explains how to set up **Automatic Transaction Execution**.
 
-Create a new sheet tab called **"RecurringTransactions"** in your Google Spreadsheet.
+> **⚠️ Important**: This is different from the **Tagihan (Bill)** feature.
+>
+> - **Tagihan (Bills)**: Just a reminder list. You must manually pay via Chat Bot. Managed via **App Settings > Tagihan**.
+> - **Auto Debit**: Automatically executes the transaction on the specified date without your interaction. **Managed via Google Sheet Only**.
+
+## Sheet Configuration
+
+To enable auto-debit, you need to manage the **"RecurringTransactions"** sheet manually.
 
 ### Sheet Structure
 
-| ID  | Nama              | Tipe     | DariDompet | KeDompet | Kategori  | Jumlah  | TanggalEksekusi | TerakhirDijalankan | Status |
-| --- | ----------------- | -------- | ---------- | -------- | --------- | ------- | --------------- | ------------------ | ------ |
-| 1   | Bayar Kontrakan   | Keluar   | Mandiri    |          | Kontrakan | 3000000 | 1               |                    | Aktif  |
-| 2   | Netflix           | Keluar   | GoPay      |          | Hiburan   | 55000   | 15              |                    | Aktif  |
-| 3   | Transfer Tabungan | Transfer | BNI        | Tabungan |           | 500000  | 25              |                    | Aktif  |
+Create a new tab called **"RecurringTransactions"** with the following header:
+
+| Nama            | Status | TanggalEksekusi | TerakhirDijalankan | Tipe   | DariDompet | KeDompet | Jumlah | Kategori |
+| :-------------- | :----- | :-------------- | :----------------- | :----- | :--------- | :------- | :----- | :------- |
+| Langganan Adobe | Aktif  | 10              | 10/10/2023         | Keluar | BNI        | -        | 300000 | Software |
+| Tabungan Auto   | Aktif  | 25              | 25/10/2023         | In     | Mandiri    | Bibit    | 500000 | Invest   |
 
 ### Column Descriptions
 
-- **ID**: Unique identifier (1, 2, 3, ...)
-- **Nama**: Transaction description (e.g., "Bayar Kontrakan", "Netflix")
-- **Tipe**: Transaction type - "Keluar" or "Transfer"
-- **DariDompet**: Source wallet (required)
-- **KeDompet**: Destination wallet (only for "Transfer" type)
-- **Kategori**: Category (only for "Keluar" type)
-- **Jumlah**: Amount (e.g., 3000000 for Rp 3,000,000)
-- **TanggalEksekusi**: Day of month to execute (1-31)
-- **TerakhirDijalankan**: Last execution date (DD/MM/YYYY) - will be auto-filled
-- **Status**: "Aktif" or "Nonaktif"
+- **Nama**: Description of the auto-debit (e.g., "Spotify").
+- **Status**: Set to `Aktif` to enable, or `Nonaktif` to disable.
+- **TanggalEksekusi**: Day of the month to execute (e.g., `1`, `15`, `28`).
+- **TerakhirDijalankan**: _System managed_. The app updates this after execution to prevent double-charging.
+- **Tipe**: `Masuk` (Income), `Keluar` (Expense), or `Transfer`.
+- **DariDompet**: Source wallet name.
+- **KeDompet**: Destination wallet name (For Transfer only).
+- **Jumlah**: Amount to transact.
+- **Kategori**: Category for the transaction. (only for "Keluar" type)
 
 ## How It Works
 

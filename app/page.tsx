@@ -14,7 +14,8 @@ import WalletIcon from "@/components/WalletIcon";
 import { useWallets } from "@/hooks/useWallets";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useBudgets } from "@/hooks/useBudgets"; // Import Hook
-import SettingsModal from "@/components/SettingsModal"; 
+import SettingsModal from "@/components/SettingsModal";
+import CalendarView from "@/components/CalendarView";
 
 // Helper to detect transfer transactions
 const isTransfer = (item: any) => {
@@ -24,7 +25,7 @@ const isTransfer = (item: any) => {
 export default function Home() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false); /
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   useEffect(() => {
     const sessionAuth = sessionStorage.getItem("finance_app_auth");
@@ -155,6 +156,53 @@ export default function Home() {
     .filter((item) => item.tipe === "Keluar" && !isTransfer(item))
     .reduce((acc, curr) => acc + Number(curr.jumlah), 0);
   const globalBalance = globalIncome - globalExpense;
+
+  // Trend Calculation
+  const { incomeTrend, expenseTrend } = useMemo(() => {
+    // Current Period Stats (already calculated in statsIncome/Expense but dependent on period)
+    // We specifically want MONTHLY trend for the Summary Cards
+
+    // Current Month
+    const currMonth =
+      activeTab === "stats" ? chartDate.getMonth() : new Date().getMonth();
+    const currYear =
+      activeTab === "stats"
+        ? chartDate.getFullYear()
+        : new Date().getFullYear();
+
+    // Previous Month
+    const prevDate = new Date(currYear, currMonth - 1, 1);
+    const prevMonth = prevDate.getMonth();
+    const prevYear = prevDate.getFullYear();
+
+    const getStats = (m: number, y: number) => {
+      const filtered = data.filter((item) => {
+        if (!item.tanggal) return false;
+        const d = parseDate(item.tanggal);
+        return d.getMonth() === m && d.getFullYear() === y;
+      });
+      const income = filtered
+        .filter((item) => item.tipe === "Masuk" && !isTransfer(item))
+        .reduce((acc, curr) => acc + Number(curr.jumlah), 0);
+      const expense = filtered
+        .filter((item) => item.tipe === "Keluar" && !isTransfer(item))
+        .reduce((acc, curr) => acc + Number(curr.jumlah), 0);
+      return { income, expense };
+    };
+
+    const currStats = getStats(currMonth, currYear);
+    const prevStats = getStats(prevMonth, prevYear);
+
+    const calcTrend = (curr: number, prev: number) => {
+      if (prev === 0) return curr > 0 ? 100 : 0;
+      return ((curr - prev) / prev) * 100;
+    };
+
+    return {
+      incomeTrend: calcTrend(currStats.income, prevStats.income),
+      expenseTrend: calcTrend(currStats.expense, prevStats.expense),
+    };
+  }, [data, chartDate, activeTab]);
 
   // Dynamic Label for Stats
   const statsLabel = useMemo(() => {
@@ -402,12 +450,14 @@ export default function Home() {
                   amount={statsIncome}
                   type="income"
                   visible={showSecrets}
+                  trend={chartPeriod === "monthly" ? incomeTrend : undefined}
                 />
                 <SummaryCard
                   title={`Pengeluaran (${statsLabel})`}
                   amount={statsExpense}
                   type="expense"
                   visible={showSecrets}
+                  trend={chartPeriod === "monthly" ? expenseTrend : undefined}
                 />
                 <SummaryCard
                   title="Total Saldo (All Time)"
@@ -437,6 +487,11 @@ export default function Home() {
                 period={chartPeriod}
                 currentDate={chartDate}
               />
+
+              {/* Calendar View (Only for Monthly view) */}
+              {chartPeriod === "monthly" && (
+                <CalendarView data={data} currentDate={chartDate} />
+              )}
             </>
           )}
         </div>
@@ -457,7 +512,7 @@ export default function Home() {
           />
         </Modal>
 
-         {/* Settings Modal */}
+        {/* Settings Modal */}
         <SettingsModal
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}

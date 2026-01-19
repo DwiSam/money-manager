@@ -8,12 +8,15 @@ A personal finance tracking application built with **Next.js**, using **Google S
 ## ✨ Features
 
 - **Dashboard**: Visual overview of income, expenses, and wallet balances.
+- **In-App Data Management** 🛠️:
+  - Manage **Wallets** (e.g. BNI, Gopay)
+  - Set **Budgets** per category
+  - Manage **Recurring Bills** (Tagihan) directly from the Settings menu.
 - **Chat Bot Integration**: Record transactions via Telegram or WhatsApp (Fonnte).
   - `Masuk 50000 BNI Gaji`
   - `Keluar 20000 GoPay Makan`
   - `Transfer 100000 Mandiri BNI Tabungan`
 - **Monthly Reports** 📊: Get a summary of your income, expenses, and savings via chat.
-- **Budgeting & Categories**: Manage spending limits per category (e.g., Makanan, Transport).
 - **Bill Reminder**: Automated daily checks for due bills.
 - **Auto Debit**: Handle recurring transactions automatically.
 - **Secure Access**: PIN protection for the web interface.
@@ -73,46 +76,18 @@ This app requires a specific Google Sheet structure.
 
 1.  Create a new Google Sheet.
 2.  Share the sheet with your **Service Account Email** (give `Editor` access).
-3.  Create the following sheets (tabs):
+3.  **Basic Setup**: Create the **Main Sheet** (First Tab) manually.
+    - **Columns**: `Tanggal`, `Tipe`, `Dompet`, `Jumlah`, `Keterangan`, `Kategori`
 
-#### 1. Main Sheet (First Tab)
+> [!TIP] > **Automatic Setup**: The app will automatically create the `Tagihan`, `Anggaran`, and `Wallets` sheets when you first add data via the **Settings** menu in the app.
+> See [SETUP_MANAGEMENT.md](SETUP_MANAGEMENT.md) for details on managing this data.
 
-Used for recording all transactions.
+#### Manual Setup (Optional)
 
-- **Columns**: `Tanggal`, `Tipe`, `Dompet`, `Jumlah`, `Keterangan`, `Kategori`
+If you prefer to set up everything manually:
 
-#### 2. Sheet "Tagihan"
-
-Used for bill reminders.
-
-- **Columns**: `Nama`, `Jumlah`, `Tanggal` (Day of month, e.g., 25), `TerakhirDibayar`
-
-#### 3. Sheet "Anggaran" (New)
-
-Used for defining categories and budget limits.
-
-- **Columns**:
-  - `Kategori`: Name of the category (e.g., "Makanan", "Transport")
-  - `Limit`: Monthly limit for this category (e.g., 3000000)
-
-#### 4. Sheet "Wallets"
-
-Used to configure available wallets in the UI.
-
-| Nama    | Logo          |
-| :------ | :------------ |
-| BNI     | `bni.svg`     |
-| Mandiri | `mandiri.svg` |
-| GoPay   | `gopay.png`   |
-| Tunai   | `cash-icon`   |
-
-> **Note**: Place logo images in the `public/` folder. Available icons: `cash-icon`, `piggy-icon`, `emergency-icon`.
-
-#### 5. Sheet "RecurringTransactions"
-
-Used for auto-debit features.
-
-- **Columns**: `Nama`, `Status` (Aktif/Nonaktif), `TanggalEksekusi`, `TerakhirDijalankan`, `Tipe`, `DariDompet`, `KeDompet`, `Jumlah`, `Kategori`
+- [**SETUP_WALLETS.md**](SETUP_WALLETS.md) - For Wallet configuration.
+- [**SETUP_AUTO_DEBIT.md**](SETUP_AUTO_DEBIT.md) - For Auto-Debit configuration (**Manual Setup Required**).
 
 ---
 
