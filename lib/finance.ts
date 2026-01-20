@@ -8,6 +8,19 @@ const toIDR = (num: number) => {
   }).format(num);
 };
 
+// Helper: Parse IDR string (e.g. "Rp 150.000,00" -> 150000)
+// Removes thousands separator (.) and converts decimal separator (,) to (.)
+export const parseIDR = (raw: string | number | undefined | null): number => {
+  if (!raw) return 0;
+  const str = raw.toString();
+  // 1. Remove everything except digits, minuses, and commas
+  const clean = str.replace(/[^0-9,-]+/g, "");
+  // 2. Replace comma with dot
+  const normalized = clean.replace(",", ".");
+  const val = parseFloat(normalized);
+  return isNaN(val) ? 0 : val;
+};
+
 export const checkBudgetWarning = async (
   doc: GoogleSpreadsheet,
   category: string,
@@ -27,8 +40,8 @@ export const checkBudgetWarning = async (
 
     if (!budgetRow) return null; // No budget set for this category
 
-    const limit = Number(budgetRow.get("Limit").replace(/[.,Rp\s]/g, ""));
-    if (isNaN(limit) || limit === 0) return null; // No limit or invalid
+    const limit = parseIDR(budgetRow.get("Limit"));
+    if (limit === 0) return null; // No limit or invalid
 
     // 2. Calculate Current Usage (This Month)
     const transactions = await sheetTransaksi.getRows();
@@ -42,9 +55,7 @@ export const checkBudgetWarning = async (
       const tKat = (t.get("Kategori") || "Lainnya").toString();
       const tTipe = (t.get("Tipe") || "").toString();
       const tDateStr = t.get("Tanggal");
-      const tAmount = Number(
-        (t.get("Jumlah") || "0").toString().replace(/[.,Rp\s]/g, "")
-      );
+      const tAmount = parseIDR(t.get("Jumlah"));
 
       if (tTipe === "Keluar" && tKat.toLowerCase() === category.toLowerCase()) {
         const [d, m, y] = tDateStr.split("/").map(Number);
@@ -54,20 +65,6 @@ export const checkBudgetWarning = async (
       }
     });
 
-    // Note: totalUsed already includes the transaction just added because logic usually
-    // runs AFTER adding row. If this runs before, we should add amountSpentNow.
-    // For safety, let's assume we run this function AFTER adding the row, so totalUsed includes it.
-    // BUT we need to be careful. The route adds row then calls this.
-    // Creating the row in Google Sheets might take a split second to be reflect in getRows()
-    // if not awaited properly or if there's rigorous caching.
-    // Actually, usually Google Sheets API updates are immediate for subsequent reads.
-    // However, to be safe and avoid extra API call for getRows right after addRow,
-    // we can pass the "previous total" + "current amount".
-    // BUT simplest is just re-fetching. Let's stick to re-fetching for accuracy or
-    // calculating manually if performance allows.
-    // Given the small scale, fetching is fine.
-
-    // 3. Check Threshold
     const percentage = (totalUsed / limit) * 100;
     const remaining = limit - totalUsed;
 
@@ -121,11 +118,9 @@ export const getMonthlyReport = async (
       const tanggal = row.get("Tanggal");
       const tipe = row.get("Tipe");
       const kategori = row.get("Kategori") || "Lainnya";
-      const jumlah = Number(
-        (row.get("Jumlah") || "0").toString().replace(/[.,Rp\s]/g, "")
-      );
+      const jumlah = parseIDR(row.get("Jumlah"));
 
-      if (!tanggal || isNaN(jumlah)) return;
+      if (!tanggal || jumlah === 0) return;
 
       const [d, m, y] = tanggal.split("/").map(Number);
       if (m - 1 === currentMonth && y === currentYear) {
@@ -168,7 +163,7 @@ export const getMonthlyReport = async (
   }
 };
 
-// --- HELPER PARSE AMOUNT WITH SUFFIX ---
+// --- HELPER PARSE AMOUNT WITH SUFFIX (USER INPUT) ---
 export const parseAmountString = (str: string): number | null => {
   const cleanStr = str.toLowerCase().trim();
 
@@ -197,8 +192,10 @@ export const parseAmountString = (str: string): number | null => {
     return Math.round(parseFloat(amountPart) * multiplier);
   }
 
-  // Fallback: Standard parsing (remove . and , assuming integer grouping not decimal)
-  // Logic existing: 10.000 -> 10000
+  // Fallback: Use parseIDR for everything else
+  // This supports users typing "150.000" or "Rp 100k" (handled above) or "150000"
+  // But wait, parseAmountString is typically for "Human Input" in Chat.
+  // Standard logic:
   const cleanNumber = cleanStr.replace(/[.,]/g, "");
   if (!isNaN(Number(cleanNumber)) && cleanNumber.length > 0) {
     return Number(cleanNumber);

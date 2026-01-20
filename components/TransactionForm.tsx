@@ -7,6 +7,8 @@ interface TransactionFormProps {
   loading: boolean;
   wallets: string[];
   categories: string[]; // New Prop
+  initialType?: string;
+  initialData?: any; // For editing
 }
 
 export default function TransactionForm({
@@ -14,13 +16,15 @@ export default function TransactionForm({
   loading,
   wallets,
   categories,
+  initialType,
+  initialData,
 }: TransactionFormProps) {
   // Use first category as default if available, otherwise "Lainnya"
   const defaultCategory = categories.length > 0 ? categories[0] : "Lainnya";
 
   const [form, setForm] = useState({
     keterangan: "",
-    tipe: "Keluar",
+    tipe: initialType || "Keluar",
     kategori: defaultCategory,
     dompet: wallets[0] || "",
     fromWallet: wallets[0] || "",
@@ -35,6 +39,38 @@ export default function TransactionForm({
       setForm((prev) => ({ ...prev, kategori: categories[0] }));
     }
   }, [categories]);
+
+  // Effect to update form type when initialType changes
+  useEffect(() => {
+    if (initialType) {
+      setForm((prev) => ({ ...prev, tipe: initialType }));
+    }
+  }, [initialType]);
+
+  // Effect to populate form when initialData changes (Edit Mode)
+  useEffect(() => {
+    if (initialData) {
+      // Convert DD/MM/YYYY to YYYY-MM-DD for input[type="date"]
+      let dateVal = new Date().toISOString().split("T")[0];
+      if (initialData.tanggal && initialData.tanggal.includes("/")) {
+        const [d, m, y] = initialData.tanggal.split("/");
+        const paddedD = d.padStart(2, "0");
+        const paddedM = m.padStart(2, "0");
+        dateVal = `${y}-${paddedM}-${paddedD}`;
+      }
+
+      setForm({
+        tanggal: dateVal,
+        tipe: initialData.tipe,
+        jumlah: initialData.jumlah,
+        keterangan: initialData.keterangan || "",
+        kategori: initialData.kategori,
+        dompet: initialData.dompet,
+        fromWallet: "", // Reset transfer fields
+        toWallet: "",
+      });
+    }
+  }, [initialData]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -213,7 +249,11 @@ export default function TransactionForm({
         disabled={loading}
         className="mt-2 w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold p-3.5 rounded-xl transition-all shadow-lg shadow-blue-900/20 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {loading ? "Menyimpan..." : "Simpan Transaksi"}
+        {loading
+          ? "Menyimpan..."
+          : initialData
+            ? "Update Transaksi"
+            : "Simpan Transaksi"}
       </button>
     </form>
   );

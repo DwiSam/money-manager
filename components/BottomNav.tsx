@@ -12,15 +12,15 @@ export default function BottomNav({
   onAddClick,
 }: BottomNavProps) {
   return (
-    <div className="fixed max-w-md md:max-w-4xl lg:max-w-6xl mx-auto bottom-0 left-0 right-0 bg-neutral-950/80 backdrop-blur-lg border-t border-neutral-800 px-4 py-3 safe-area-pb z-40">
-      <div className="max-w-md mx-auto flex items-center justify-around">
+    <div className="fixed bottom-6 left-4 right-4 md:left-1/2 md:-translate-x-1/2 md:w-full md:max-w-md bg-neutral-900/60 backdrop-blur-sm border border-white/10 rounded-2xl shadow-2xl shadow-black/50 z-50 safe-area-pb">
+      <div className="flex items-center justify-around px-2 py-3">
         {/* Home Button */}
         <button
           onClick={() => onTabChange("home")}
-          className={`flex flex-col items-center gap-1 transition-colors ${
+          className={`flex flex-col items-center gap-1 transition-all duration-300 ${
             activeTab === "home"
-              ? "text-blue-500"
-              : "text-neutral-500 hover:text-neutral-300"
+              ? "text-blue-400 scale-110"
+              : "text-neutral-400 hover:text-white"
           }`}
         >
           <svg
@@ -43,10 +43,10 @@ export default function BottomNav({
         {/* History Button */}
         <button
           onClick={() => onTabChange("history")}
-          className={`flex flex-col items-center gap-1 transition-colors ${
+          className={`flex flex-col items-center gap-1 transition-all duration-300 ${
             activeTab === "history"
-              ? "text-blue-500"
-              : "text-neutral-500 hover:text-neutral-300"
+              ? "text-blue-400 scale-110"
+              : "text-neutral-400 hover:text-white"
           }`}
         >
           <svg
@@ -68,10 +68,10 @@ export default function BottomNav({
         </button>
 
         {/* Add Button (Floating) */}
-        <div className="relative -top-6">
+        <div className="relative -top-8">
           <button
             onClick={onAddClick}
-            className="w-14 h-14 bg-blue-600 hover:bg-blue-500 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-900/30 transition-transform active:scale-90 border-4 border-neutral-950"
+            className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-700 hover:from-blue-400 hover:to-blue-600 rounded-full flex items-center justify-center text-white shadow-lg shadow-blue-500/40 transition-transform active:scale-90 border-4 border-neutral-900"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -93,10 +93,10 @@ export default function BottomNav({
         {/* Wallet Button */}
         <button
           onClick={() => onTabChange("wallet")}
-          className={`flex flex-col items-center gap-1 transition-colors ${
+          className={`flex flex-col items-center gap-1 transition-all duration-300 ${
             activeTab === "wallet"
-              ? "text-blue-500"
-              : "text-neutral-500 hover:text-neutral-300"
+              ? "text-blue-400 scale-110"
+              : "text-neutral-400 hover:text-white"
           }`}
         >
           <svg
@@ -119,10 +119,10 @@ export default function BottomNav({
         {/* Stats Button */}
         <button
           onClick={() => onTabChange("stats")}
-          className={`flex flex-col items-center gap-1 transition-colors ${
+          className={`flex flex-col items-center gap-1 transition-all duration-300 ${
             activeTab === "stats"
-              ? "text-blue-500"
-              : "text-neutral-500 hover:text-neutral-300"
+              ? "text-blue-400 scale-110"
+              : "text-neutral-400 hover:text-white"
           }`}
         >
           <svg

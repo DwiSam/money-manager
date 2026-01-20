@@ -4,4 +4,6 @@ export interface Transaction {
   jumlah: string;
   keterangan: string;
   dompet: string;
+  kategori?: string;
+  rowIndex?: number;
 }

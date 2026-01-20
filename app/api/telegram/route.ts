@@ -1,14 +1,17 @@
 import { GoogleSpreadsheet } from "google-spreadsheet";
 import { JWT } from "google-auth-library";
 import { NextResponse } from "next/server";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
   checkBudgetWarning,
   getMonthlyReport,
   parseAmountString,
+  parseIDR,
 } from "@/lib/finance";
 
 // --- CONFIG ---
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+import { getGeminiClient } from "@/lib/gemini";
 
 const getDoc = async () => {
   const serviceAccountAuth = new JWT({
@@ -96,23 +99,106 @@ const toIDR = (num: number) => {
   }).format(num);
 };
 
+// --- HELPER AI CHAT ---
+// --- HELPER AI CHAT ---
+async function getAIReply(
+  userMessage: string,
+  context: "chat" | "transaction_success" | "report" | "list" = "chat",
+  data?: string
+) {
+  try {
+    const genAI = getGeminiClient();
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      systemInstruction:
+        "Kamu adalah asisten keuangan pribadi yang lucu, cerdas, dan suportif. Namamu adalah 'Asisten Pribadi'. Gaya bicaramu santai, gaul (bahasa sehari-hari Indonesia, bahasa jawa dan sedikit english), dan sering pakai emoji. Tugasmu mencatat keuangan dan menemani user curhat soal duit. Kalau user boros, tegur dengan jenaka. Kalau hemat, puji mereka. Jangan lupakan konteks bahwa ini adalah aplikasi pencatat keuangan.",
+    });
+
+    let prompt = "";
+
+    if (context === "transaction_success") {
+      prompt = `
+        User baru saja mencatat transaksi ini:
+        ${data}
+
+        Berikan konfirmasi bahwa transaksi BERHASIL dicatat.
+        Komentari transaksi tersebut dengan gaya lucu/jenaka/suportif tergantung nominal dan kategorinya.
+        Sebutkan ringkasan transaksinya (Nominal, Kategori, Dompet) agar user yakin data benar.
+        Jangan terlalu panjang, maksimal 2-3 kalimat.
+      `;
+    } else if (context === "report") {
+      prompt = `
+            Berikut adalah data laporan keuangan user (Saldo/Laporan Bulanan):
+            ${data}
+
+            Tugasmu adalah menyajikan data ini ke user dengan gaya bahasamu yang lucu dan asik.
+            Jangan ubah angka-angkanya, tapi kamu boleh komentar soal kondisi keuangannya (misal kalau saldo dikit, suruh hemat. Kalau banyak, puji).
+            Formatlah agar enak dibaca di chat (gunakan poin-poin atau emoji).
+        `;
+    } else if (context === "list") {
+      prompt = `
+            Berikut adalah daftar item (Tagihan/Kategori) user:
+            ${data}
+
+            Sajikan daftar ini ke user.
+            Jika ini daftar tagihan, ingatkan untuk segera bayar yang belum lunas dengan gaya santai tapi tegas.
+            Jika ini daftar kategori, infoin aja ini kategori yang tersedia.
+        `;
+    } else {
+      // Context Chat Normal
+      prompt = `User berkata: "${userMessage}". Jawablah dengan panggilan bos muda keturunan kaisar china tapi harus tetap relevan. Jika mereka bertanya soal fitur bot, jelaskan cara pakainya (Format: "Saldo" (Cek Saldo)\n- Tagihan (List Tagihan)\n- Kategori (List Kategori)\n- Keluar BNI 15000 Makanan Bakso (Catat + Kategori)\n- Transfer BNI Mandiri 15000 (Transfer)\n- Masuk BNI 15000 Bakso (Catat)\n- Bayar Listrik 30000 Gopay (Bayar Tagihan)\n- Done Wifi (Bayar Tagihan)\n- Laporan (Laporan Bulanan)).`;
+    }
+
+    const result = await model.generateContent(prompt);
+    const response = result.response.text();
+    return response;
+  } catch (error) {
+    console.error("AI Reply Error:", error);
+    // Fallback static messages jika AI error
+    let errorMsg = "AI Error: Gagal koneksi.";
+    if (error instanceof Error) {
+      errorMsg += ` ${error.message}`;
+    }
+
+    if (
+      context === "transaction_success" ||
+      context === "report" ||
+      context === "list"
+    ) {
+      // Fallback ke raw data kalau AI error, biar user seenggaknya dapet infonya
+      return `✅ Permintaan diproses, tapi AI lagi ngadat: ${errorMsg}\n\nData Asli:\n${data}`;
+    }
+    return `Maaf bos, lagi pusing nih. Error: ${errorMsg}`;
+  }
+}
+
 // --- HELPER REPLY TELEGRAM ---
 async function replyTelegram(chatId: string | number, message: string) {
+  const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
   try {
-    await fetch(
-      `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: message,
-          parse_mode: "Markdown",
-        }),
-      }
+    console.log(
+      `📤 Sending Telegram message to ${chatId}: ${message.substring(0, 50)}...`
     );
+
+    // Force Plain Text for debugging purposes
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: "Markdown",
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("❌ Telegram Send Failed:", errText);
+    } else {
+      console.log("✅ Telegram Sent Successfully");
+    }
   } catch (e) {
-    console.error("Gagal kirim Telegram", e);
+    console.error("❌ Gagal kirim Telegram (Network Error):", e);
   }
 }
 
@@ -124,11 +210,111 @@ export async function POST(req: Request) {
 
     // Extract message from Telegram update
     const message = body.message;
+    if (!message) return NextResponse.json({ ok: true });
+
+    const chatId = message.chat.id;
+
+    // ==========================================
+    // 📸 FITUR AI VISION (IMAGE HANDLER)
+    // ==========================================
+    if (message.photo) {
+      await replyTelegram(chatId, "👀 Sedang menganalisa struk belanja...");
+
+      try {
+        // 1. Ambil File ID resolusi terbesar (array terakhir)
+        const fileId = message.photo[message.photo.length - 1].file_id;
+
+        // 2. Dapatkan URL File dari Telegram
+        const fileRes = await fetch(
+          `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`
+        );
+        const fileData = await fileRes.json();
+        const filePath = fileData.result.file_path;
+        const imageUrl = `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${filePath}`;
+
+        // 3. Download Gambar jadi Buffer
+        const imageResp = await fetch(imageUrl);
+        const imageArrayBuffer = await imageResp.arrayBuffer();
+
+        // 4. Siapkan Prompt untuk Gemini
+        // Gunakan model eksperimental terbaru atau fallback ke Pro jika Flash bermasalah
+        const genAI = getGeminiClient();
+        const model = genAI.getGenerativeModel({
+          model: "gemini-2.5-flash",
+        });
+        const prompt = `
+          Analisa gambar struk ini. Ekstrak data dalam format JSON murni:
+          {
+            "merchant": "Nama Toko",
+            "total": 15000 (angka saja),
+            "kategori": "Makanan/Belanja/Transport/Tagihan/Lainnya (Pilih satu yg paling cocok)"
+          }
+          Jika nama toko tidak jelas, tebak saja atau pakai "Unknown".
+          Kategori harus general.
+          HANYA return JSON string, tanpa markdown block.
+        `;
+
+        // 5. Kirim ke Gemini
+        const result = await model.generateContent([
+          prompt,
+          {
+            inlineData: {
+              data: Buffer.from(imageArrayBuffer).toString("base64"),
+              mimeType: "image/jpeg",
+            },
+          },
+        ]);
+
+        const responseText = result.response.text();
+        // Bersihkan markdown jika Gemini iseng kasih ```json
+        const cleanJson = responseText.replace(/```json|```/g, "").trim();
+        const dataStruk = JSON.parse(cleanJson);
+
+        // 6. Catat ke Google Sheet
+        const doc = await getDoc();
+        const sheet = doc.sheetsByIndex[0];
+        const today = new Date().toLocaleDateString("id-ID");
+
+        // Default Dompet = "Tunai" (Karena AI gabisa nebak lu bayar pake apa)
+        // Lu bisa edit codingan ini kalau mau defaultnya "GoPay"
+        const defaultDompet = "Tunai";
+
+        await sheet.addRow({
+          Tanggal: today,
+          Tipe: "Keluar",
+          Dompet: defaultDompet,
+          Jumlah: dataStruk.total,
+          Keterangan: `${dataStruk.merchant} (Auto Scan)`,
+          Kategori: dataStruk.kategori,
+        });
+
+        // AI Confirmation for Receipt
+        const aiReply = await getAIReply(
+          "",
+          "transaction_success",
+          `Pengeluaran di ${dataStruk.merchant} sebesar ${toIDR(
+            Number(dataStruk.total)
+          )} untuk kategori ${dataStruk.kategori} pake ${defaultDompet}.`
+        );
+        await replyTelegram(chatId, aiReply);
+      } catch (error: any) {
+        console.error("AI Error:", error);
+        let errorMessage = "Gagal baca struk.";
+        if (error.message) errorMessage += ` Error: ${error.message}`;
+
+        await replyTelegram(
+          chatId,
+          `❌ ${errorMessage}\n\nTip: Pastikan gambarnya jelas atau coba input manual aja bro.`
+        );
+      }
+
+      return NextResponse.json({ ok: true });
+    }
+
     if (!message || !message.text) {
       return NextResponse.json({ ok: true }); // Ignore non-text messages
     }
 
-    const chatId = message.chat.id;
     const text = message.text;
     const lowerMsg = text.toLowerCase().trim();
 
@@ -162,7 +348,7 @@ export async function POST(req: Request) {
 
       rows.forEach((row) => {
         const nama = row.get("Nama");
-        const jumlah = row.get("Jumlah");
+        const jumlah = parseIDR(row.get("Jumlah"));
         const tanggalTagihan = parseInt(row.get("Tanggal"));
         const terakhirDibayarStr = row.get("TerakhirDibayar");
 
@@ -186,21 +372,22 @@ export async function POST(req: Request) {
           }
 
           pendingBills += `• ${nama}: ${
-            Number(jumlah) === 0 ? "Menyesuaikan" : toIDR(Number(jumlah))
+            jumlah === 0 ? "Menyesuaikan" : toIDR(jumlah)
           } (${statusWaktu})\n`;
         }
       });
 
       if (pendingCount === 0) {
-        await replyTelegram(
-          chatId,
-          "🎉 Mantap bos! Semua tagihan bulan ini udah LUNAS. Tidur nyenyak."
+        const aiReply = await getAIReply(
+          "",
+          "list",
+          "Semua tagihan bulan ini SUDAH LUNAS. Aman terkendali."
         );
+        await replyTelegram(chatId, aiReply);
       } else {
-        await replyTelegram(
-          chatId,
-          `🧾 *TAGIHAN BELUM DIBAYAR*\n\n${pendingBills}\nKetik "Done [Nama]" kalau udah dibayar.`
-        );
+        const rawList = `Daftar Tagihan Belum Lunas:\n${pendingBills}`;
+        const aiReply = await getAIReply("", "list", rawList);
+        await replyTelegram(chatId, aiReply);
       }
       return NextResponse.json({ ok: true });
     }
@@ -216,18 +403,19 @@ export async function POST(req: Request) {
       let replyText = "📂 *Kategori Tersedia:*";
 
       if (!sheet) {
-        replyText = "❌ Sheet 'Anggaran' belum dibuat bro.";
+        replyText = "Sheet 'Anggaran' belum dibuat, jadi belum ada kategori.";
       } else {
         const rows = await sheet.getRows();
         const categories = rows.map((r) => r.get("Kategori")).filter((k) => k);
         if (categories.length === 0) {
-          replyText = "📂 Belum ada kategori yang diatur.";
+          replyText = "Belum ada kategori yang diatur di Sheet.";
         } else {
-          replyText += `\n\n- ${categories.join("\n- ")}`;
+          replyText = `Daftar Kategori Tersedia:\n- ${categories.join("\n- ")}`;
         }
       }
 
-      await replyTelegram(chatId, replyText);
+      const aiReply = await getAIReply("", "list", replyText);
+      await replyTelegram(chatId, aiReply);
       return NextResponse.json({ ok: true });
     }
 
@@ -349,10 +537,7 @@ export async function POST(req: Request) {
         const dompet = (row.get("Dompet") || "").toString();
         const tipe = (row.get("Tipe") || "").toString();
         // Parse jumlah safely like in WA route
-        const rawJumlah = (row.get("Jumlah") || "0")
-          .toString()
-          .replace(/[.,Rp\s]/g, "");
-        const jumlah = parseFloat(rawJumlah);
+        const jumlah = parseIDR(row.get("Jumlah"));
 
         if (dompet && !isNaN(jumlah)) {
           const key = dompet.toUpperCase().trim();
@@ -369,32 +554,28 @@ export async function POST(req: Request) {
         }
       });
 
-      let replyText = "📊 *Rekap Saldo Saat Ini*\n------------------\n";
+      let replyText = "Rekap Saldo Saat Ini:\n";
       let totalAset = 0;
 
       const sortedKeys = Object.keys(balances).sort();
 
       if (sortedKeys.length === 0) {
-        replyText += "Belum ada data transaksi bro.";
+        replyText += "Belum ada data transaksi sama sekali.";
       } else {
         sortedKeys.forEach((dompet) => {
           const saldo = balances[dompet];
           totalAset += saldo;
-          replyText += `• ${dompet}: ${toIDR(saldo)
+          replyText += `- ${dompet}: ${toIDR(saldo)
             .replace("Rp", "")
             .trim()}\n`;
         });
-        replyText += `------------------\n💰 *Total Aset: ${toIDR(totalAset)}*`;
+        replyText += `\nTotal Aset: ${toIDR(totalAset)}`;
       }
 
-      await replyTelegram(chatId, replyText);
+      const aiReply = await getAIReply("", "report", replyText);
+      await replyTelegram(chatId, aiReply);
       return NextResponse.json({ ok: true });
     }
-
-    // ... existing imports ...
-
-    // Inside POST
-    // ...
 
     // ==========================================
     // 📊 FITUR BARU: LAPORAN BULANAN
@@ -407,20 +588,18 @@ export async function POST(req: Request) {
     ) {
       const doc = await getDoc();
       const report = await getMonthlyReport(doc);
-      await replyTelegram(chatId, report);
+      // report dari getMonthlyReport udah formatted string, kita kasi leluasa AI buat kemas ulang/komentari
+      const aiReply = await getAIReply("", "report", report);
+      await replyTelegram(chatId, aiReply);
       return NextResponse.json({ ok: true });
     }
 
     // Parse transaksi
     const data = parseMessage(text);
 
-    // ...
-
     if (!data) {
-      await replyTelegram(
-        chatId,
-        `❌ Ngetik apa itu bos, nii kalo mau nyuruh gua!\n\nPerintah:\n- "Saldo" (Cek Saldo)\n- "Tagihan" (List Tagihan)\n- "Kategori" (List Kategori)\n- "Keluar BNI 15000 Makanan Bakso" (Catat + Kategori)\n- "Transfer BNI Mandiri 15000" (Transfer)\n- "Masuk BNI 15000 Bakso" (Catat)\n- "Bayar Listrik 30000 Gopay" (Bayar Tagihan)\n- "Done Wifi (Bayar Tagihan)"\n- "Laporan" (Laporan Bulanan)`
-      );
+      const aiReply = await getAIReply(text, "chat");
+      await replyTelegram(chatId, aiReply);
       return NextResponse.json({ ok: true });
     }
 
@@ -428,8 +607,6 @@ export async function POST(req: Request) {
     const doc = await getDoc();
     const sheet = doc.sheetsByIndex[0];
     const today = new Date().toLocaleDateString("id-ID");
-
-    let replyMessage = "";
 
     // Handle Transfer
     if (data.tipe === "Transfer") {
@@ -460,9 +637,14 @@ export async function POST(req: Request) {
         },
       ]);
 
-      replyMessage = `✅ *Transfer berhasil dicatat!*\n💸 ${toIDR(
-        Number(jumlah)
-      )}\n📤 ${fromWallet} ➡ 📥 ${toWallet}`;
+      const aiReply = await getAIReply(
+        "",
+        "transaction_success",
+        `Transfer sebesar ${toIDR(
+          Number(jumlah)
+        )} dari ${fromWallet} ke ${toWallet}.`
+      );
+      await replyTelegram(chatId, aiReply);
     } else {
       // --- LOGIC PARSING KATEGORI DINAMIS (TELEGRAM) ---
       const sheetAnggaran = doc.sheetsByTitle["Anggaran"];
@@ -515,15 +697,16 @@ export async function POST(req: Request) {
         if (alert) warningMsg = alert;
       }
 
-      const emoji = data.tipe === "Masuk" ? "💰" : "💸";
-      replyMessage = `✅ *Transaksi berhasil dicatat!*\n${emoji} ${
-        data.tipe
-      }: ${toIDR(Number(data.jumlah))}\n📍 Dompet: ${
-        data.dompet
-      }\n📂 Kategori: ${finalKategori}\n📝 ${finalKeterangan}${warningMsg}`;
+      const aiReply = await getAIReply(
+        "",
+        "transaction_success",
+        `${data.tipe} sebesar ${toIDR(Number(data.jumlah))} di dompet ${
+          data.dompet
+        } untuk kategori ${finalKategori}. Keterangan: ${finalKeterangan}. ${warningMsg}`
+      );
+      await replyTelegram(chatId, aiReply);
     }
 
-    await replyTelegram(chatId, replyMessage);
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("❌ Telegram webhook error:", error);

@@ -10,7 +10,13 @@ export function useTransactions() {
     try {
       const res = await fetch("/api/sheet");
       const json = await res.json();
-      setData(json);
+
+      if (Array.isArray(json)) {
+        setData(json);
+      } else {
+        console.error("API returned invalid format:", json);
+        setData([]);
+      }
     } catch (error) {
       console.error("Failed to fetch data", error);
     }
@@ -18,12 +24,20 @@ export function useTransactions() {
 
   const handleCreateTransaction = async (
     formData: any,
-    onClose: () => void
+    onClose: () => void,
   ) => {
     setLoading(true);
-    const [year, month, day] = formData.tanggal.split("-");
-    // Fix: Remove leading zeros to match inconsistent standard (e.g. 1/1/2026 vs 01/01/2026) -> force standard 1/1/2026
-    const formattedDate = `${parseInt(day)}/${parseInt(month)}/${year}`;
+    let formattedDate = formData.tanggal;
+
+    // Check if format is YYYY-MM-DD (standard HTML date input)
+    if (formData.tanggal.includes("-")) {
+      const parts = formData.tanggal.split("-");
+      if (parts.length === 3) {
+        const [year, month, day] = parts;
+        formattedDate = `${parseInt(day)}/${parseInt(month)}/${year}`;
+      }
+    }
+    // Else assume it is already DD/MM/YYYY or compatible string
 
     // Handle Transfer
     if (formData.tipe === "Transfer") {
@@ -84,14 +98,14 @@ export function useTransactions() {
         alert(
           `Gagal menyimpan transfer: ${
             error instanceof Error ? error.message : "Unknown error"
-          }`
+          }`,
         );
         // Rollback
         setData((prev) =>
           prev.filter(
             (item) =>
-              item !== outgoingTransaction && item !== incomingTransaction
-          )
+              item !== outgoingTransaction && item !== incomingTransaction,
+          ),
         );
       } finally {
         setLoading(false);
@@ -135,7 +149,7 @@ export function useTransactions() {
         alert(
           `Gagal menyimpan: ${
             error instanceof Error ? error.message : "Unknown error"
-          }`
+          }`,
         );
         setData((prev) => prev.filter((item) => item !== newItem));
       } finally {
@@ -144,10 +158,71 @@ export function useTransactions() {
     }
   };
 
+  const updateTransaction = async (rowIndex: number, formData: any) => {
+    setLoading(true);
+    let formattedDate = formData.tanggal;
+    if (formData.tanggal.includes("-")) {
+      const parts = formData.tanggal.split("-");
+      if (parts.length === 3) {
+        const [year, month, day] = parts;
+        formattedDate = `${parseInt(day)}/${parseInt(month)}/${year}`;
+      }
+    }
+
+    const updatedItem = {
+      ...formData,
+      tanggal: formattedDate,
+      kategori: formData.kategori || "Lainnya",
+    };
+
+    try {
+      const response = await fetch("/api/sheet", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rowIndex, data: updatedItem }),
+      });
+
+      if (!response.ok) throw new Error("Gagal update data");
+
+      // Refetch to ensure sync
+      await fetchData();
+    } catch (error) {
+      console.error("Update error:", error);
+      alert("Gagal update transaksi");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteTransaction = async (rowIndex: number) => {
+    if (!confirm("Yakin ingin menghapus transaksi ini?")) return;
+    setLoading(true);
+
+    try {
+      const response = await fetch("/api/sheet", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rowIndex }),
+      });
+
+      if (!response.ok) throw new Error("Gagal hapus data");
+
+      // Optimistic update or Refetch
+      setData((prev) => prev.filter((item) => item.rowIndex !== rowIndex));
+    } catch (error) {
+      console.error("Delete error:", error);
+      alert("Gagal hapus transaksi");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return {
     data,
     loading,
     fetchData,
     createTransaction: handleCreateTransaction,
+    updateTransaction,
+    deleteTransaction,
   };
 }

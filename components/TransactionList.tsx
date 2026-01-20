@@ -1,5 +1,6 @@
 import React from "react";
 import { Transaction } from "@/types";
+import CategoryIcon from "@/components/CategoryIcon";
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -7,6 +8,8 @@ interface TransactionListProps {
   selectedDate?: string;
   onDateSelect?: (date: string) => void;
   showDateFilter?: boolean;
+  onEdit?: (transaction: Transaction) => void;
+  onDelete?: (rowIndex: number) => void;
 }
 
 export default function TransactionList({
@@ -15,7 +18,13 @@ export default function TransactionList({
   selectedDate,
   onDateSelect,
   showDateFilter = false,
+  onEdit,
+  onDelete,
 }: TransactionListProps) {
+  const [activeRowIndex, setActiveRowIndex] = React.useState<number | null>(
+    null,
+  );
+
   const formatRupiah = (num: number) => {
     return new Intl.NumberFormat("id-ID", {
       style: "currency",
@@ -48,7 +57,7 @@ export default function TransactionList({
 
   // Get unique dates sorted
   const availableDates = Array.from(
-    new Set(transactions.map((t) => t.tanggal))
+    new Set(transactions.map((t) => t.tanggal)),
   ).sort((a, b) => parseDate(b).getTime() - parseDate(a).getTime());
 
   // Filter by type and optionally by date
@@ -113,15 +122,21 @@ export default function TransactionList({
       ) : (
         /* Group by Date */
         filteredData
-          .reduce((groups, transaction) => {
-            const lastGroup = groups[groups.length - 1];
-            if (lastGroup && lastGroup.date === transaction.tanggal) {
-              lastGroup.items.push(transaction);
-            } else {
-              groups.push({ date: transaction.tanggal, items: [transaction] });
-            }
-            return groups;
-          }, [] as { date: string; items: typeof filteredData }[])
+          .reduce(
+            (groups, transaction) => {
+              const lastGroup = groups[groups.length - 1];
+              if (lastGroup && lastGroup.date === transaction.tanggal) {
+                lastGroup.items.push(transaction);
+              } else {
+                groups.push({
+                  date: transaction.tanggal,
+                  items: [transaction],
+                });
+              }
+              return groups;
+            },
+            [] as { date: string; items: typeof filteredData }[],
+          )
           .map((group) => (
             <div key={group.date} className="space-y-3 mb-6">
               {/* Date Header */}
@@ -137,32 +152,125 @@ export default function TransactionList({
                 {group.items.map((item, idx) => (
                   <div
                     key={`${group.date}-${idx}`}
-                    className="flex justify-between items-center p-4 rounded-xl border border-neutral-800 bg-neutral-900/50 hover:bg-neutral-900 transition-colors group"
+                    onClick={() =>
+                      setActiveRowIndex(
+                        activeRowIndex === item.rowIndex
+                          ? null
+                          : (item.rowIndex ?? null),
+                      )
+                    }
+                    className={`relative flex justify-between items-center p-4 rounded-xl border border-neutral-800 bg-neutral-900/50 hover:bg-neutral-900 transition-colors group cursor-pointer ${
+                      activeRowIndex === item.rowIndex
+                        ? "bg-neutral-900 border-blue-500/30 ring-1 ring-blue-500/20"
+                        : ""
+                    }`}
                   >
-                    <div className="flex flex-col">
-                      <span className="font-medium text-neutral-200">
-                        {item.keterangan}
-                      </span>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400 border border-neutral-700">
-                          {item.dompet || "Tunai"}
+                    <div className="flex items-center gap-4">
+                      {/* Icon Container */}
+                      <div
+                        className={`p-3 rounded-full ${
+                          item.tipe === "Masuk"
+                            ? "bg-emerald-500/10 text-emerald-500"
+                            : "bg-rose-500/10 text-rose-500"
+                        }`}
+                      >
+                        <CategoryIcon
+                          category={item.kategori || "Lainnya"}
+                          size={20}
+                        />
+                      </div>
+
+                      <div className="flex flex-col">
+                        <span className="font-medium text-neutral-200">
+                          {item.kategori}
                         </span>
-                        {/* Date shown in header, maybe redundant here but ok to keep for specific context if needed, or remove? 
-                            User asked for header, usually implies item date can include time or be simpler. 
-                            Let's keep it simple or remove the date from item since it's in header. 
-                            Actually let's remove the date from the item row since it's grouped.
-                        */}
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-neutral-500 truncate max-w-[150px] block">
+                            {item.keterangan}
+                          </span>
+                        </div>
                       </div>
                     </div>
                     <div
-                      className={`font-bold font-mono tracking-tight ${
+                      className={`flex flex-col items-end justify-center gap-2 font-bold font-mono tracking-tight ${
                         item.tipe === "Masuk"
                           ? "text-emerald-400"
                           : "text-rose-400"
                       }`}
                     >
-                      {item.tipe === "Masuk" ? "+" : "-"}{" "}
-                      {formatRupiah(Number(item.jumlah))}
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400 border border-neutral-700">
+                        {item.dompet || "Tunai"}
+                      </span>
+                      <span className="whitespace-nowrap">
+                        {item.tipe === "Masuk" ? "+" : "-"}
+                        {formatRupiah(Number(item.jumlah))}
+                      </span>
+                    </div>
+
+                    {/* Action Buttons (Visible on Active or Group Hover) */}
+                    <div
+                      className={`absolute right-4 top-1/2 -translate-y-1/2 flex gap-2 transition-opacity bg-neutral-900/90 p-1 rounded-lg border border-neutral-700 shadow-xl z-20 ${
+                        activeRowIndex === item.rowIndex
+                          ? "opacity-100"
+                          : "opacity-0 md:group-hover:opacity-100"
+                      }`}
+                    >
+                      {onEdit && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEdit(item);
+                          }}
+                          className="p-2 hover:bg-neutral-800 rounded-md text-blue-400 transition-colors"
+                          title="Edit"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                          </svg>
+                        </button>
+                      )}
+                      {onDelete && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!item.rowIndex) {
+                              alert(
+                                "Error: ID Transaksi tidak valid. Silakan refresh.",
+                              );
+                              return;
+                            }
+                            onDelete(item.rowIndex);
+                          }}
+                          className="p-2 hover:bg-neutral-800 rounded-md text-red-400 transition-colors"
+                          title="Hapus"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M3 6h18" />
+                            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}

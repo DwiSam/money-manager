@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useBudgets } from "@/hooks/useBudgets";
 import { useBills, Bill } from "@/hooks/useBills";
 import { useWallets } from "@/hooks/useWallets";
+import DeleteModal from "./DeleteModal"; // Import DeleteModal
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -12,7 +13,7 @@ interface SettingsModalProps {
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<"anggaran" | "tagihan" | "dompet">(
-    "anggaran"
+    "anggaran",
   );
 
   const {
@@ -43,12 +44,38 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [editMode, setEditMode] = useState(false);
   const [editingId, setEditingId] = useState(""); // Kategori or Nama
 
+  // Delete Modal State
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteType, setDeleteType] = useState<
+    "budget" | "bill" | "wallet" | null
+  >(null);
+  const [deleteId, setDeleteId] = useState("");
+
+  const handleConfirmDelete = async () => {
+    if (!deleteType || !deleteId) return;
+
+    try {
+      if (deleteType === "budget") {
+        await deleteBudget(deleteId);
+      } else if (deleteType === "bill") {
+        await deleteBill(deleteId);
+      } else if (deleteType === "wallet") {
+        await deleteWallet(deleteId);
+      }
+    } finally {
+      setDeleteModalOpen(false);
+      setDeleteType(null);
+      setDeleteId("");
+    }
+  };
+
   const [budgetForm, setBudgetForm] = useState({ kategori: "", limit: "" });
   const [billForm, setBillForm] = useState({
     nama: "",
     jumlah: "",
     tanggal: "",
   });
+  const [billType, setBillType] = useState<"Rutin" | "Sekali">("Rutin"); // New State
   const [walletForm, setWalletForm] = useState({ nama: "", logo: "" });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -157,7 +184,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 : "border-transparent text-neutral-400 hover:text-neutral-200"
             }`}
           >
-            Anggaran (Budget)
+            Anggaran
           </button>
           <button
             onClick={() => {
@@ -170,7 +197,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 : "border-transparent text-neutral-400 hover:text-neutral-200"
             }`}
           >
-            Tagihan (Bills)
+            Tagihan
           </button>
           <button
             onClick={() => {
@@ -183,7 +210,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 : "border-transparent text-neutral-400 hover:text-neutral-200"
             }`}
           >
-            Dompet (Wallets)
+            Dompet
           </button>
         </div>
 
@@ -255,8 +282,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     {isSubmitting
                       ? "Menyimpan..."
                       : editMode
-                      ? "Update Budget"
-                      : "Tambah Budget"}
+                        ? "Update Budget"
+                        : "Tambah Budget"}
                   </button>
                 </div>
               </form>
@@ -285,8 +312,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             setEditMode(true);
                             setEditingId(item.kategori);
                             setBudgetForm({
-                              kategori: item.kategori,
-                              limit: item.limit,
+                              kategori: item.kategori || "",
+                              limit: item.limit || "",
                             });
                           }}
                           className="p-2 bg-neutral-800 hover:bg-blue-900/30 text-neutral-400 hover:text-blue-400 rounded-lg"
@@ -295,9 +322,9 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         </button>
                         <button
                           onClick={() => {
-                            if (confirm(`Hapus budget ${item.kategori}?`)) {
-                              deleteBudget(item.kategori);
-                            }
+                            setDeleteType("budget");
+                            setDeleteId(item.kategori);
+                            setDeleteModalOpen(true);
                           }}
                           className="p-2 bg-neutral-800 hover:bg-red-900/30 text-neutral-400 hover:text-red-400 rounded-lg"
                         >
@@ -317,55 +344,120 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 className="bg-neutral-800/50 p-4 rounded-xl space-y-4 border border-neutral-800"
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-xs uppercase text-neutral-500 font-semibold tracking-wider">
-                      Nama Tagihan
+                  <div className="md:col-span-2">
+                    <label className="text-xs uppercase text-neutral-500 font-semibold tracking-wider block mb-2">
+                      Tipe Tagihan
                     </label>
-                    <input
-                      className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500/50 outline-none"
-                      placeholder="Contoh: WiFi Rumah"
-                      value={billForm.nama}
-                      onChange={(e) =>
-                        setBillForm({ ...billForm, nama: e.target.value })
-                      }
-                      required
-                    />
+                    <div className="flex bg-neutral-900 p-1 rounded-lg border border-neutral-700 w-fit">
+                      <button
+                        type="button"
+                        onClick={() => setBillType("Rutin")}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                          billType === "Rutin"
+                            ? "bg-emerald-600 text-white shadow-sm"
+                            : "text-neutral-400 hover:text-white"
+                        }`}
+                      >
+                        Rutin (Bulanan)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBillType("Sekali")}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                          billType === "Sekali"
+                            ? "bg-emerald-600 text-white shadow-sm"
+                            : "text-neutral-400 hover:text-white"
+                        }`}
+                      >
+                        Sekali Bayar
+                      </button>
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-xs uppercase text-neutral-500 font-semibold tracking-wider">
-                      Jumlah (IDR)
-                    </label>
-                    <input
-                      className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-sm font-mono focus:ring-2 focus:ring-emerald-500/50 outline-none"
-                      placeholder="0 (Jika variabel)"
-                      value={billForm.jumlah}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, "");
-                        setBillForm({ ...billForm, jumlah: val });
-                      }}
-                      required
-                    />
-                    <p className="text-xs text-neutral-500 text-right">
-                      {billForm.jumlah && `Rp ${formatRupiah(billForm.jumlah)}`}
-                      {billForm.jumlah === "0" && " (Menyesuaikan)"}
-                    </p>
+
+                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-xs uppercase text-neutral-500 font-semibold tracking-wider">
+                        Nama Tagihan
+                      </label>
+                      <input
+                        className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500/50 outline-none"
+                        placeholder={
+                          billType === "Rutin"
+                            ? "Contoh: WiFi Rumah"
+                            : "Contoh: Pinjaman Teman"
+                        }
+                        value={billForm.nama}
+                        onChange={(e) =>
+                          setBillForm({ ...billForm, nama: e.target.value })
+                        }
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs uppercase text-neutral-500 font-semibold tracking-wider">
+                        Jumlah (IDR)
+                      </label>
+                      <input
+                        className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-sm font-mono focus:ring-2 focus:ring-emerald-500/50 outline-none"
+                        placeholder="0 (Jika variabel)"
+                        value={billForm.jumlah}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, "");
+                          setBillForm({ ...billForm, jumlah: val });
+                        }}
+                        required
+                      />
+                      <p className="text-xs text-neutral-500 text-right">
+                        {billForm.jumlah &&
+                          `Rp ${formatRupiah(billForm.jumlah)}`}
+                        {billForm.jumlah === "0" && " (Menyesuaikan)"}
+                      </p>
+                    </div>
                   </div>
-                  <div className="space-y-1">
+
+                  <div className="space-y-1 md:col-span-2">
                     <label className="text-xs uppercase text-neutral-500 font-semibold tracking-wider">
                       Tanggal Jatuh Tempo
                     </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="31"
-                      className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500/50 outline-none"
-                      placeholder="Tanggal (1-31)"
-                      value={billForm.tanggal}
-                      onChange={(e) =>
-                        setBillForm({ ...billForm, tanggal: e.target.value })
-                      }
-                      required
-                    />
+                    {billType === "Rutin" ? (
+                      <input
+                        type="number"
+                        min="1"
+                        max="31"
+                        className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500/50 outline-none"
+                        placeholder="Tanggal (1-31)"
+                        value={billForm.tanggal}
+                        onChange={(e) =>
+                          setBillForm({ ...billForm, tanggal: e.target.value })
+                        }
+                        required
+                      />
+                    ) : (
+                      <input
+                        type="date"
+                        className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500/50 outline-none text-white scheme-dark"
+                        value={
+                          // Convert DD/MM/YYYY back to YYYY-MM-DD for input
+                          billForm.tanggal.includes("/")
+                            ? billForm.tanggal.split("/").reverse().join("-")
+                            : ""
+                        }
+                        onChange={(e) => {
+                          // Save as DD/MM/YYYY
+                          const dateVal = e.target.value; // YYYY-MM-DD
+                          if (dateVal) {
+                            const [y, m, d] = dateVal.split("-");
+                            setBillForm({
+                              ...billForm,
+                              tanggal: `${d}/${m}/${y}`,
+                            });
+                          } else {
+                            setBillForm({ ...billForm, tanggal: "" });
+                          }
+                        }}
+                        required
+                      />
+                    )}
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">
@@ -388,8 +480,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     {isSubmitting
                       ? "Menyimpan..."
                       : editMode
-                      ? "Update Tagihan"
-                      : "Tambah Tagihan"}
+                        ? "Update Tagihan"
+                        : "Tambah Tagihan"}
                   </button>
                 </div>
               </form>
@@ -424,10 +516,13 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                           onClick={() => {
                             setEditMode(true);
                             setEditingId(item.nama);
+                            // Detect Type
+                            const isOneTime = item.tanggal.includes("/");
+                            setBillType(isOneTime ? "Sekali" : "Rutin");
                             setBillForm({
-                              nama: item.nama,
-                              jumlah: item.jumlah,
-                              tanggal: item.tanggal,
+                              nama: item.nama || "",
+                              jumlah: item.jumlah || "",
+                              tanggal: item.tanggal || "",
                             });
                           }}
                           className="p-2 bg-neutral-800 hover:bg-emerald-900/30 text-neutral-400 hover:text-emerald-400 rounded-lg"
@@ -436,9 +531,9 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         </button>
                         <button
                           onClick={() => {
-                            if (confirm(`Hapus tagihan ${item.nama}?`)) {
-                              deleteBill(item.nama);
-                            }
+                            setDeleteType("bill");
+                            setDeleteId(item.nama);
+                            setDeleteModalOpen(true);
                           }}
                           className="p-2 bg-neutral-800 hover:bg-red-900/30 text-neutral-400 hover:text-red-400 rounded-lg"
                         >
@@ -506,8 +601,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     {isSubmitting
                       ? "Menyimpan..."
                       : editMode
-                      ? "Update Dompet"
-                      : "Tambah Dompet"}
+                        ? "Update Dompet"
+                        : "Tambah Dompet"}
                   </button>
                 </div>
               </form>
@@ -536,7 +631,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                             setEditMode(true);
                             setEditingId(item.nama);
                             setWalletForm({
-                              nama: item.nama,
+                              nama: item.nama || "",
                               logo: item.logo || "",
                             });
                           }}
@@ -546,9 +641,9 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         </button>
                         <button
                           onClick={() => {
-                            if (confirm(`Hapus dompet ${item.nama}?`)) {
-                              deleteWallet(item.nama);
-                            }
+                            setDeleteType("wallet");
+                            setDeleteId(item.nama);
+                            setDeleteModalOpen(true);
                           }}
                           className="p-2 bg-neutral-800 hover:bg-red-900/30 text-neutral-400 hover:text-red-400 rounded-lg"
                         >
@@ -563,6 +658,18 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           )}
         </div>
       </div>
+
+      <DeleteModal
+        isOpen={deleteModalOpen}
+        onClose={() => {
+          setDeleteModalOpen(false);
+          setDeleteType(null);
+          setDeleteId("");
+        }}
+        onConfirm={handleConfirmDelete}
+        title={`Hapus ${deleteType === "budget" ? "Anggaran" : deleteType === "bill" ? "Tagihan" : "Dompet"}?`}
+        message={`Apakah Anda yakin ingin menghapus ${deleteType === "budget" ? "anggaran" : deleteType === "bill" ? "tagihan" : "dompet"} ini?`}
+      />
     </div>
   );
 }

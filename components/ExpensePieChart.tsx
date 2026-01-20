@@ -8,6 +8,7 @@ import {
   ResponsiveContainer,
   Legend,
   Tooltip,
+  Sector,
 } from "recharts";
 
 interface Transaction {
@@ -111,19 +112,49 @@ export default function ExpensePieChart({
       .slice(0, 10); // Top 10 categories
   }, [data, period, currentDate]);
 
-  const formatRupiah = (value: number) => {
-    if (value >= 1000000) {
-      return `Rp ${(value / 1000000).toFixed(1)}jt`;
-    } else if (value >= 1000) {
-      return `Rp ${(value / 1000).toFixed(0)}rb`;
-    }
-    return `Rp ${value}`;
+  const renderActiveShape = (props: any) => {
+    const {
+      cx,
+      cy,
+      midAngle,
+      innerRadius,
+      outerRadius,
+      startAngle,
+      endAngle,
+      fill,
+      payload,
+      value,
+    } = props;
+
+    return (
+      <g>
+        <Sector
+          cx={cx}
+          cy={cy}
+          innerRadius={innerRadius}
+          outerRadius={outerRadius + 8} // Pop out effect
+          startAngle={startAngle}
+          endAngle={endAngle}
+          fill={fill}
+        />
+        <Sector
+          cx={cx}
+          cy={cy}
+          startAngle={startAngle}
+          endAngle={endAngle}
+          innerRadius={outerRadius + 10}
+          outerRadius={outerRadius + 14}
+          fill={fill}
+          fillOpacity={0.3}
+        />
+      </g>
+    );
   };
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3 shadow-lg">
+        <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-3 shadow-lg z-50">
           <p className="text-white font-medium text-sm">{payload[0].name}</p>
           <p className="text-emerald-400 font-bold font-mono text-base">
             {new Intl.NumberFormat("id-ID", {
@@ -140,58 +171,53 @@ export default function ExpensePieChart({
 
   if (chartData.length === 0) {
     return (
-      <div className="bg-neutral-900/50 border border-neutral-800 p-6 rounded-2xl">
-        <h3 className="text-lg font-semibold text-white mb-4">
-          Breakdown Pengeluaran
-        </h3>
-        <div className="text-center py-12 text-neutral-500">
-          <p className="text-sm">Belum ada data pengeluaran</p>
-        </div>
+      <div className="text-center py-12 text-neutral-500">
+        <p className="text-sm">Belum ada data pengeluaran</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-neutral-900/50 border border-neutral-800 p-6 rounded-2xl">
-      <h3 className="text-lg font-semibold text-white mb-4">
-        Breakdown Pengeluaran (Top 10)
-      </h3>
-      <ResponsiveContainer
-        width="100%"
-        height={Math.max(350, chartData.length * 40 + 40)}
-      >
-        <PieChart>
-          <Pie
-            data={chartData}
-            cx="50%"
-            cy="50%"
-            labelLine={false}
-            outerRadius={90}
-            fill="#8884d8"
-            dataKey="value"
-          >
-            {chartData.map((entry, index) => (
-              <Cell
-                key={`cell-${index}`}
-                fill={COLORS[index % COLORS.length]}
-              />
-            ))}
-          </Pie>
-          <Tooltip content={<CustomTooltip />} />
-          <Legend
-            verticalAlign="bottom"
-            wrapperStyle={{
-              paddingTop: "20px",
-              maxHeight: "150px",
-              overflowY: "auto",
-            }}
-            iconType="circle"
-            formatter={(value) => (
-              <span className="text-neutral-300 text-xs">{value}</span>
-            )}
-          />
-        </PieChart>
-      </ResponsiveContainer>
+    <div className="w-full">
+      <div className="w-full h-[400px]">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              activeShape={renderActiveShape}
+              data={chartData}
+              cx="50%"
+              cy="50%"
+              innerRadius={60} // Added inner radius for donut style which looks better with active shape usually, but can be 0
+              outerRadius={90}
+              fill="#8884d8"
+              dataKey="value"
+              className="outline-none focus:outline-none" // Tailwind class to remove focus outline
+            >
+              {chartData.map((entry, index) => (
+                <Cell
+                  key={`cell-${index}`}
+                  fill={COLORS[index % COLORS.length]}
+                  stroke="rgba(0,0,0,0.1)"
+                  className="outline-none focus:outline-none"
+                />
+              ))}
+            </Pie>
+            <Tooltip content={<CustomTooltip />} />
+            <Legend
+              verticalAlign="bottom"
+              wrapperStyle={{
+                paddingTop: "20px",
+              }}
+              iconType="circle"
+              formatter={(value) => (
+                <span className="text-neutral-300 text-xs font-medium">
+                  {value}
+                </span>
+              )}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   );
 }

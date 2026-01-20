@@ -1,6 +1,7 @@
 import { GoogleSpreadsheet } from "google-spreadsheet";
 import { JWT } from "google-auth-library";
 import { NextResponse } from "next/server";
+import { parseIDR } from "@/lib/finance";
 
 const getDoc = async () => {
   const serviceAccountAuth = new JWT({
@@ -11,7 +12,7 @@ const getDoc = async () => {
 
   const doc = new GoogleSpreadsheet(
     process.env.GOOGLE_SHEET_ID!,
-    serviceAccountAuth
+    serviceAccountAuth,
   );
   await doc.loadInfo();
   return doc;
@@ -24,16 +25,18 @@ export async function GET() {
     const rows = await sheet.getRows();
 
     const data = rows.map((row) => ({
+      rowIndex: row.rowNumber, // Use rowNumber (1-based index from sheet)
       tanggal: row.get("Tanggal"),
       keterangan: row.get("Keterangan"),
       kategori: row.get("Kategori") || "Lainnya",
       tipe: row.get("Tipe"),
       dompet: row.get("Dompet"),
-      jumlah: row.get("Jumlah"),
+      jumlah: parseIDR(row.get("Jumlah")).toString(), // Send clean number string to frontend
     }));
 
     return NextResponse.json(data);
   } catch (error) {
+    console.error("❌ Sheet API Error:", error);
     return NextResponse.json({ error: "Gagal ambil data" }, { status: 500 });
   }
 }
@@ -68,5 +71,75 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("Error Sheet:", error);
     return NextResponse.json({ error: "Gagal simpan data" }, { status: 500 });
+  }
+}
+
+export async function PUT(req: Request) {
+  try {
+    const body = await req.json();
+    const { rowIndex, data } = body;
+
+    if (!rowIndex || !data) {
+      return NextResponse.json(
+        { error: "Missing rowIndex or data" },
+        { status: 400 },
+      );
+    }
+
+    const doc = await getDoc();
+    const sheet = doc.sheetsByIndex[0];
+    const rows = await sheet.getRows();
+
+    // Find row by index (GoogleSpreadsheet rowIndex is 1-based usually matched with rows[i].rowIndex)
+    // @ts-ignore
+    const row = rows.find((r) => r.rowIndex === rowIndex);
+
+    if (!row) {
+      return NextResponse.json({ error: "Row not found" }, { status: 404 });
+    }
+
+    // Update fields
+    if (data.tanggal) row.assign({ Tanggal: data.tanggal });
+    if (data.keterangan) row.assign({ Keterangan: data.keterangan });
+    if (data.kategori) row.assign({ Kategori: data.kategori });
+    if (data.tipe) row.assign({ Tipe: data.tipe });
+    if (data.dompet) row.assign({ Dompet: data.dompet });
+    if (data.jumlah) row.assign({ Jumlah: data.jumlah });
+
+    await row.save();
+
+    return NextResponse.json({ message: "Updated!" });
+  } catch (error) {
+    console.error("❌ Edit Error:", error);
+    return NextResponse.json({ error: "Gagal update data" }, { status: 500 });
+  }
+}
+
+export async function DELETE(req: Request) {
+  try {
+    const body = await req.json();
+    const { rowIndex } = body;
+
+    if (!rowIndex) {
+      return NextResponse.json({ error: "Missing rowIndex" }, { status: 400 });
+    }
+
+    const doc = await getDoc();
+    const sheet = doc.sheetsByIndex[0];
+    const rows = await sheet.getRows();
+
+    // @ts-ignore
+    const row = rows.find((r) => r.rowIndex === rowIndex);
+
+    if (!row) {
+      return NextResponse.json({ error: "Row not found" }, { status: 404 });
+    }
+
+    await row.delete();
+
+    return NextResponse.json({ message: "Deleted!" });
+  } catch (error) {
+    console.error("❌ Delete Error:", error);
+    return NextResponse.json({ error: "Gagal hapus data" }, { status: 500 });
   }
 }

@@ -65,7 +65,7 @@ const sendWhatsApp = async (message: string) => {
     await fetch("https://api.fonnte.com/send", {
       method: "POST",
       headers: {
-        Authorization: FONNTE_TOKEN ?? "",
+        Authorization: FONNTE_TOKEN || "",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({

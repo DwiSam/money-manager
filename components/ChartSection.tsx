@@ -218,7 +218,7 @@ export default function ChartSection({
 
   // Format tooltip value (fix type issue)
   const formatTooltip = (
-    value: number | string | (string | number)[] | undefined
+    value: number | string | (string | number)[] | undefined,
   ) => {
     if (value === undefined) return "";
     const numValue = typeof value === "number" ? value : 0;
@@ -250,8 +250,8 @@ export default function ChartSection({
               {p === "weekly"
                 ? "Mingguan"
                 : p === "monthly"
-                ? "Bulanan"
-                : "Tahunan"}
+                  ? "Bulanan"
+                  : "Tahunan"}
             </button>
           ))}
         </div>
@@ -301,8 +301,8 @@ export default function ChartSection({
       </div>
 
       {/* Chart */}
-      <div className="bg-neutral-900/50 border border-neutral-800 p-4 rounded-2xl">
-        <ResponsiveContainer width="100%" height={300}>
+      <div className="w-full">
+        <ResponsiveContainer width="100%" height={200}>
           <AreaChart data={chartData}>
             <defs>
               <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">

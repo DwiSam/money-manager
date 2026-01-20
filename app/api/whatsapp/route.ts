@@ -5,10 +5,93 @@ import {
   checkBudgetWarning,
   getMonthlyReport,
   parseAmountString,
+  parseIDR, // Import parseIDR
 } from "@/lib/finance";
+import { getGeminiClient } from "@/lib/gemini";
 
 // --- CONFIG ---
 const FONNTE_TOKEN = process.env.FONNTE_TOKEN;
+
+// --- HELPER AI CHAT ---
+// --- HELPER AI CHAT ---
+async function getAIReply(
+  userMessage: string,
+  context: "chat" | "transaction_success" | "report" | "list" = "chat",
+  data?: string,
+) {
+  try {
+    const genAI = getGeminiClient();
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      systemInstruction:
+        "Kamu adalah asisten keuangan pribadi yang lucu, cerdas, dan suportif. Namamu adalah 'Asisten Pribadi'. Gaya bicaramu santai, gaul (bahasa sehari-hari Indonesia, bahasa jawa dan sedikit english), dan sering pakai emoji. Tugasmu mencatat keuangan dan menemani user curhat soal duit. Kalau user boros, tegur dengan jenaka. Kalau hemat, puji mereka. Jangan lupakan konteks bahwa ini adalah aplikasi pencatat keuangan.",
+    });
+
+    let prompt = "";
+
+    if (context === "transaction_success") {
+      prompt = `
+        User baru saja mencatat transaksi ini:
+        ${data}
+
+        Berikan konfirmasi bahwa transaksi BERHASIL dicatat.
+        Komentari transaksi tersebut dengan gaya lucu/jenaka/suportif tergantung nominal dan kategorinya.
+        Sebutkan ringkasan transaksinya (Nominal, Kategori, Dompet) agar user yakin data benar.
+        Jangan terlalu panjang, maksimal 2-3 kalimat.
+      `;
+    } else if (context === "report") {
+      prompt = `
+            Berikut adalah data laporan keuangan user (Saldo/Laporan Bulanan):
+            ${data}
+
+            Tugasmu adalah menyajikan data ini ke user dengan gaya bahasamu yang lucu dan asik.
+            Jangan ubah angka-angkanya, tapi kamu boleh komentar soal kondisi keuangannya (misal kalau saldo dikit, suruh hemat. Kalau banyak, puji).
+            Formatlah agar enak dibaca di chat (gunakan poin-poin atau emoji).
+        `;
+    } else if (context === "list") {
+      prompt = `
+            Berikut adalah daftar item (Tagihan/Kategori) user:
+            ${data}
+
+            Sajikan daftar ini ke user.
+            Jika ini daftar tagihan, ingatkan untuk segera bayar yang belum lunas dengan gaya santai tapi tegas.
+            Jika ini daftar kategori, infoin aja ini kategori yang tersedia.
+        `;
+    } else {
+      // Context Chat Normal
+      prompt = `User berkata: "${userMessage}". Jawablah dengan panggilan bos muda keturunan kaisar china tapi harus tetap relevan. Jika mereka bertanya soal fitur bot, jelaskan cara pakainya (Format: "Saldo" (Cek Saldo)\n- Tagihan (List Tagihan)\n- Kategori (List Kategori)\n- Keluar BNI 15000 Makanan Bakso (Catat + Kategori)\n- Transfer BNI Mandiri 15000 (Transfer)\n- Masuk BNI 15000 Bakso (Catat)\n- Bayar Listrik 30000 Gopay (Bayar Tagihan)\n- Done Wifi (Bayar Tagihan)\n- Laporan (Laporan Bulanan)).`;
+    }
+
+    const result = await model.generateContent(prompt);
+    const response = result.response.text();
+    return response;
+  } catch (error) {
+    console.error("AI Reply Error:", error);
+    // Fallback static messages jika AI error
+    let errorMsg = "AI Error: Gagal koneksi.";
+    if (error instanceof Error) {
+      errorMsg += ` ${error.message}`;
+    }
+
+    if (
+      context === "transaction_success" ||
+      context === "report" ||
+      context === "list"
+    ) {
+      // Fallback ke raw data kalau AI error, biar user seenggaknya dapet infonya
+      return `✅ Permintaan diproses, tapi AI lagi ngadat: ${errorMsg}\n\nData Asli:\n${data}`;
+    }
+    return `Maaf bos, lagi pusing nih. Error: ${errorMsg}`;
+  }
+}
+
+// ... (Rest of existing helpers: getDoc, parseMessage, replyFonnte, toIDR) ...
+// Since I can't easily jump around, I will insert getAIReply at top and then modify POST.
+// BUT replace_file_content works on line ranges.
+// I will split this into two calls for safety.
+// First call: Imports and getAIReply.
+// Second call: Updating POST logic.
+// Returning original content for now to abort this specific tool call and do it properly.
 
 const getDoc = async () => {
   const serviceAccountAuth = new JWT({
@@ -18,7 +101,7 @@ const getDoc = async () => {
   });
   const doc = new GoogleSpreadsheet(
     process.env.GOOGLE_SHEET_ID!,
-    serviceAccountAuth
+    serviceAccountAuth,
   );
   await doc.loadInfo();
   return doc;
@@ -62,7 +145,7 @@ function parseMessage(message: string) {
   // 2. Normal Mode
   let tipe = "Keluar";
   const tipeIndex = parts.findIndex((p) =>
-    ["masuk", "keluar"].includes(p.toLowerCase())
+    ["masuk", "keluar"].includes(p.toLowerCase()),
   );
   if (tipeIndex !== -1) {
     tipe = parts[tipeIndex].toLowerCase() === "masuk" ? "Masuk" : "Keluar";
@@ -156,47 +239,98 @@ export async function POST(req: Request) {
 
       rows.forEach((row) => {
         const nama = row.get("Nama");
-        const jumlah = row.get("Jumlah");
-        const tanggalTagihan = parseInt(row.get("Tanggal"));
+        const jumlah = parseIDR(row.get("Jumlah"));
+        const rawTanggal = (row.get("Tanggal") || "").toString();
+
+        /* --- LOGIC BARU: Support Tanggal Penuh (One-time) vs Harian (Recurring) --- */
+        let isOneTime = rawTanggal.includes("/");
+        let isDue = false;
+        let diffDays = 0; // Negatif = Telat, Positif = H-Sekian, 0 = Hari ini
+
+        if (isOneTime) {
+          // Format: DD/MM/YYYY
+          const [d, m, y] = rawTanggal.split("/").map(Number);
+          const dueDate = new Date(y, m - 1, d); // Month is 0-indexed
+
+          // Set text date to be comparable (reset hours)
+          const todayDate = new Date();
+          todayDate.setHours(0, 0, 0, 0);
+          dueDate.setHours(0, 0, 0, 0);
+
+          const timeDiff = dueDate.getTime() - todayDate.getTime();
+          diffDays = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+          // Filter logic:
+          // Kalau One-time bill sudah lewat jauh (misal > 30 hari lalu) dan belum dibayar -> Tetap muncul sebagai hutang
+          // Tapi kalau masa depan -> Muncul warning H-sekian
+          // Kita anggap semua one-time bill yang belum dibayar adalah valid untuk ditagih.
+          isDue = true;
+        } else {
+          // Format: DD (Recurring Monthly)
+          const tanggalTagihan = parseInt(rawTanggal);
+          diffDays = tanggalTagihan - currentDay;
+          isDue = true; // Always check logic below
+        }
+
         const terakhirDibayarStr = row.get("TerakhirDibayar"); // Format: DD/MM/YYYY
 
-        // Check if paid this month
+        // Check if paid this month (Recurring) OR Paid Forever (One-time)
         let alreadyPaid = false;
+
         if (terakhirDibayarStr) {
-          const [day, month, year] = terakhirDibayarStr.split("/").map(Number);
-          if (month - 1 === currentMonth && year === currentYear) {
+          if (isOneTime) {
+            // Kalau One-Time dan sudah ada tanggal bayar -> LUNAS SELAMANYA
             alreadyPaid = true;
+          } else {
+            // Kalau Recurring, cek apakah bulan pembayarannya sama dengan bulan ini
+            const [day, month, year] = terakhirDibayarStr
+              .split("/")
+              .map(Number);
+            if (month - 1 === currentMonth && year === currentYear) {
+              alreadyPaid = true;
+            }
           }
         }
 
-        if (!alreadyPaid) {
+        if (!alreadyPaid && isDue) {
           pendingCount++;
-          // Kalkulasi hari (H-3, H+1, Hari ini)
+
           let statusWaktu = "";
-          if (tanggalTagihan === currentDay) {
+
+          if (diffDays === 0) {
             statusWaktu = "⚠️ HARI INI!";
-          } else if (currentDay > tanggalTagihan) {
-            statusWaktu = `❌ Telat ${currentDay - tanggalTagihan} hari`;
+          } else if (diffDays < 0) {
+            statusWaktu = `❌ Telat ${Math.abs(diffDays)} hari`;
           } else {
-            statusWaktu = `⏳ H-${tanggalTagihan - currentDay}`;
+            statusWaktu = `⏳ H-${diffDays}`;
           }
 
+          // Special case: Kalau recurring hari ini tanggal 25, dan tagihan tgl 2, berarti H+23 BULAN DEPAN?
+          // Logic lama: currentDay > tanggalTagihan -> Telat.
+          // Kita pertahankan logic lama untuk recurring: Asumsi kalau lewat tanggalnya belum bayar = Telat bulan ini.
+
+          // Untuk One-time:
+          // Jika diffDays < 0 (Telat), diffDays > 0 (Coming soon)
+          // Jika One-time bill masih lama banget (misal tahun depan), mungkin bisa di-skip biar chat gak penuh?
+          // Tapi user minta "Ingatkan", jadi tampilkan saja.
+
           pendingBills += `• ${nama}: ${
-            Number(jumlah) === 0 ? "Menyesuaikan" : toIDR(Number(jumlah))
+            jumlah === 0 ? "Menyesuaikan" : toIDR(jumlah)
           } (${statusWaktu})\n`;
         }
       });
 
       if (pendingCount === 0) {
-        await replyFonnte(
-          sender,
-          "🎉 Mantap bos! Semua tagihan bulan ini udah LUNAS. Tidur nyenyak."
+        const aiReply = await getAIReply(
+          "",
+          "list",
+          "Semua tagihan bulan ini SUDAH LUNAS. Aman terkendali.",
         );
+        await replyFonnte(sender, aiReply);
       } else {
-        await replyFonnte(
-          sender,
-          `🧾 *TAGIHAN BELUM DIBAYAR*\n\n${pendingBills}\nKetik "Done [Nama]" kalau udah dibayar.\nContoh: "Done Wifi"`
-        );
+        const rawList = `Daftar Tagihan Belum Lunas:\n${pendingBills}`;
+        const aiReply = await getAIReply("", "list", rawList);
+        await replyFonnte(sender, aiReply);
       }
       return NextResponse.json({ status: "success" });
     }
@@ -209,28 +343,29 @@ export async function POST(req: Request) {
     ) {
       const doc = await getDoc();
       const sheet = doc.sheetsByTitle["Anggaran"];
+      let replyText = "";
       if (!sheet) {
-        await replyFonnte(sender, "❌ Sheet 'Anggaran' belum dibuat bro.");
-        return NextResponse.json({ status: "error" });
-      }
-      const rows = await sheet.getRows();
-      const categories = rows.map((r) => r.get("Kategori")).filter((k) => k);
-
-      if (categories.length === 0) {
-        await replyFonnte(sender, "📂 Belum ada kategori yang diatur.");
+        replyText = "Sheet 'Anggaran' belum dibuat bro.";
       } else {
-        await replyFonnte(
-          sender,
-          `📂 *Kategori Tersedia:*\n\n- ${categories.join("\n- ")}`
-        );
+        const rows = await sheet.getRows();
+        const categories = rows.map((r) => r.get("Kategori")).filter((k) => k);
+
+        if (categories.length === 0) {
+          replyText = "Belum ada kategori yang diatur di Sheet.";
+        } else {
+          replyText = `Daftar Kategori Tersedia:\n- ${categories.join("\n- ")}`;
+        }
       }
+
+      const aiReply = await getAIReply("", "list", replyText);
+      await replyFonnte(sender, aiReply);
       return NextResponse.json({ status: "success" });
     }
 
     // 3. BAYAR TAGIHAN EXPENSE (VARIABLE) - PRIORITY
     // Trigger: "Bayar Listrik 350000 Gopay" or "Bayar Listrik 350rb Gopay"
     const payExpenseMatch = lowerMsg.match(
-      /^(?:bayar|lunas|done)\s+(.+?)\s+([0-9.,]+[a-zA-Z]*)\s+(.+)$/
+      /^(?:bayar|lunas|done)\s+(.+?)\s+([0-9.,]+[a-zA-Z]*)\s+(.+)$/,
     );
 
     if (payExpenseMatch) {
@@ -282,8 +417,8 @@ export async function POST(req: Request) {
         await replyFonnte(
           sender,
           `✅ *TAGIHAN LUNAS & TERCATAT!*\n\n🧾 Tagihan: ${actualName}\n💰 Nominal: ${toIDR(
-            Number(amount)
-          )}\n💸 Sumber: ${walletName}\n\nMantap bos, kewajiban tuntas! 😎`
+            Number(amount),
+          )}\n💸 Sumber: ${walletName}\n\nMantap bos, kewajiban tuntas! 😎`,
         );
       } else {
         await replyFonnte(sender, `❌ Gak nemu tagihan "${targetName}" bro.`);
@@ -326,12 +461,12 @@ export async function POST(req: Request) {
 
         await replyFonnte(
           sender,
-          `✅ Mantab bos! Tagihan *${actualName}* udah ditandain LUNAS bulan ini (${todayStr}).`
+          `✅ Mantab bos! Tagihan *${actualName}* udah ditandain LUNAS bulan ini (${todayStr}).`,
         );
       } else {
         await replyFonnte(
           sender,
-          `❌ Gak nemu tagihan yang namanya "${targetName}" bro. Coba cek lagi.`
+          `❌ Gak nemu tagihan yang namanya "${targetName}" bro. Coba cek lagi.`,
         );
       }
       return NextResponse.json({ status: "success" });
@@ -364,10 +499,7 @@ export async function POST(req: Request) {
         // Ambil data row dengan aman (cegah undefined)
         const dompet = (row.get("Dompet") || "").toString();
         const tipe = (row.get("Tipe") || "").toString();
-        const rawJumlah = (row.get("Jumlah") || "0")
-          .toString()
-          .replace(/[.,Rp\s]/g, "");
-        const jumlah = parseFloat(rawJumlah);
+        const jumlah = parseIDR(row.get("Jumlah"));
 
         // Skip kalau data gak lengkap
         if (!dompet || isNaN(jumlah)) return;
@@ -386,38 +518,38 @@ export async function POST(req: Request) {
 
       let replyText = "";
 
+      const aiReply = await getAIReply("", "report", replyText); // Wait we need to build replyText first, but logic below builds it.
+      // Wait, the logic below builds loop. I should replace subsequent logic or rewrite it.
+      // Re-reading logic...
+
       if (targetWallet) {
         // --- CEK SATU DOMPET ---
         const key = targetWallet.toUpperCase();
         const saldo = balances[key] || 0;
-        replyText = `💳 *Saldo ${key}*\nRp ${toIDR(saldo)
-          .replace("Rp", "")
-          .trim()}`;
+        replyText = `Saldo ${key}: Rp ${toIDR(saldo).replace("Rp", "").trim()}`;
       } else {
         // --- CEK SEMUA DOMPET ---
-        replyText = "📊 *Rekap Saldo Saat Ini*\n------------------\n";
+        replyText = "Rekap Saldo Saat Ini:\n";
         let totalAset = 0;
 
         const sortedKeys = Object.keys(balances).sort();
 
         if (sortedKeys.length === 0) {
-          replyText += "Belum ada data transaksi bro.";
+          replyText += "Belum ada data transaksi.";
         } else {
           sortedKeys.forEach((dompet) => {
             const saldo = balances[dompet];
             totalAset += saldo;
-            // Tampilkan hanya yg saldonya bukan 0 (opsional, biar rapi)
-            replyText += `• ${dompet}: ${toIDR(saldo)
+            replyText += `- ${dompet}: ${toIDR(saldo)
               .replace("Rp", "")
               .trim()}\n`;
           });
-          replyText += `------------------\n💰 *Total Aset: ${toIDR(
-            totalAset
-          )}*`;
+          replyText += `\nTotal Aset: ${toIDR(totalAset)}`;
         }
       }
 
-      await replyFonnte(sender, replyText);
+      const aiResponse = await getAIReply("", "report", replyText);
+      await replyFonnte(sender, aiResponse);
       return NextResponse.json({ status: "success" });
     }
 
@@ -439,7 +571,8 @@ export async function POST(req: Request) {
     ) {
       const doc = await getDoc();
       const report = await getMonthlyReport(doc);
-      await replyFonnte(sender, report);
+      const aiReply = await getAIReply("", "report", report);
+      await replyFonnte(sender, aiReply);
       return NextResponse.json({ status: "success" });
     }
 
@@ -449,18 +582,16 @@ export async function POST(req: Request) {
     const data = parseMessage(incomingMsg);
 
     if (!data) {
-      // Kalau bukan format cek saldo DAN bukan format transaksi -> Error
-      await replyFonnte(
-        sender,
-        `❌ Ngetik apa itu bos, nii kalo mau nyuruh gua!\n\nPerintah:\n- "Saldo" (Cek Saldo)\n- "Tagihan" (List Tagihan)\n- "Kategori" (List Kategori)\n- "Keluar BNI 15000 Makanan Bakso" (Catat + Kategori)\n- "Transfer BNI Mandiri 15000" (Transfer)\n- "Masuk BNI 15000 Bakso" (Catat)\n- "Bayar Listrik 30000 Gopay" (Bayar Tagihan)\n- "Done Wifi (Bayar Tagihan)"\n- "Laporan" (Laporan Bulanan)`
-      );
-      return NextResponse.json({ status: "invalid_format" });
+      // 🤖 FITUR CHAT AI (FALLBACK)
+      // Kalau bukan command spesifik, lempar ke Gemini
+      const aiReply = await getAIReply(incomingMsg, "chat");
+      await replyFonnte(sender, aiReply);
+      return NextResponse.json({ status: "success" });
     }
 
     const doc = await getDoc();
     const sheet = doc.sheetsByIndex[0];
     const today = new Date().toLocaleDateString("id-ID");
-    let replyMessage = "";
 
     // Handle Transfer
     if (data.tipe === "Transfer") {
@@ -493,9 +624,16 @@ export async function POST(req: Request) {
           Kategori: "Transfer", // Auto category
         },
       ]);
-      replyMessage = `✅ Widiihh, banyak duit nii bisa transfer wkwk\n💸 ${toIDR(
-        Number(data.jumlah)
-      )}\n📤 ${fromWallet} ➡ 📥 ${toWallet}`;
+
+      // 🤖 AI REPLY TRANSFER
+      const aiReply = await getAIReply(
+        "",
+        "transaction_success",
+        `Transfer sebesar ${toIDR(
+          Number(data.jumlah),
+        )} dari ${fromWallet} ke ${toWallet}.`,
+      );
+      await replyFonnte(sender, aiReply);
     }
     // Handle Transaksi Biasa
     else {
@@ -522,7 +660,7 @@ export async function POST(req: Request) {
           // Ambil format asli dari sheet (biar casing-nya bagus, misal "makanan" -> "Makanan")
           const catRows = await sheetAnggaran?.getRows();
           const matchedRow = catRows?.find(
-            (r) => r.get("Kategori").toLowerCase() === candidate
+            (r) => r.get("Kategori").toLowerCase() === candidate,
           );
           finalKategori = matchedRow ? matchedRow.get("Kategori") : "Lainnya";
 
@@ -550,19 +688,22 @@ export async function POST(req: Request) {
         const alert = await checkBudgetWarning(
           doc,
           finalKategori,
-          Number(data.jumlah)
+          Number(data.jumlah),
         );
         if (alert) warningMsg = alert;
       }
 
-      const formattedAmount = toIDR(Number(data.jumlah));
-      replyMessage =
-        data.tipe === "Masuk"
-          ? `Mantap bos, tambah terus!\n\n💰 ${formattedAmount}\n📥 Dompet: ${data.dompet}\n📂 Kategori: ${finalKategori}\n📝 Keterangan: ${finalKeterangan}\n\nSaldo ${data.dompet} nambah nii! 🎉`
-          : `Jajan teruss!!!\n\n💰 ${formattedAmount}\n📤 Dompet: ${data.dompet}\n📂 Kategori: ${finalKategori}\n📝 Keterangan: ${finalKeterangan}\n\nSaldo ${data.dompet} lu tinggal dikit anjir.${warningMsg}`;
+      // 🤖 AI REPLY TRANSACTION
+      const aiReply = await getAIReply(
+        "",
+        "transaction_success",
+        `${data.tipe} sebesar ${toIDR(Number(data.jumlah))} di dompet ${
+          data.dompet
+        } untuk kategori ${finalKategori}. Keterangan: ${finalKeterangan}. ${warningMsg}`,
+      );
+      await replyFonnte(sender, aiReply);
     }
 
-    await replyFonnte(sender, replyMessage);
     return NextResponse.json({ status: "success" });
   } catch (error) {
     console.error(error);

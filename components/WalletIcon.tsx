@@ -30,7 +30,7 @@ export default function WalletIcon({
   const walletLower = wallet.toLowerCase();
 
   return (
-    <div className="w-12 h-12 rounded-full bg-white/30 border border-neutral-800 flex items-center justify-center p-2 overflow-hidden">
+    <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center p-2 overflow-hidden">
       {walletLogo.type === "image" && walletLogo.src ? (
         <Image
           src={walletLogo.src}

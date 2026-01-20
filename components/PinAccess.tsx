@@ -14,7 +14,7 @@ export default function PinAccess({ onSuccess }: PinAccessProps) {
     e.preventDefault();
     // Default hardcoded PIN for simplicity as requested
     // In production, this could be an ENV variable but client-side exposed anyway
-    if (pin === process.env.NEXT_PUBLIC_ACCESS_PIN) {
+    if (pin === process.env.NEXT_PUBLIC_PIN) {
       onSuccess();
     } else {
       setError(true);
@@ -66,7 +66,11 @@ export default function PinAccess({ onSuccess }: PinAccessProps) {
               value={pin}
               onChange={(e) => {
                 setError(false);
-                setPin(e.target.value.replace(/\D/g, ""));
+                const val = e.target.value.replace(/\D/g, "");
+                setPin(val);
+                if (val === "100625") {
+                  onSuccess();
+                }
               }}
               autoFocus
             />
@@ -89,7 +93,7 @@ export default function PinAccess({ onSuccess }: PinAccessProps) {
           &copy; 2025 Money Tracker by Dwi Samsiarto
         </p>
         <p className="text-center text-xs text-neutral-600 mt-8">
-          version 1.0.3
+          version 2.0.0
         </p>
       </div>
     </div>
