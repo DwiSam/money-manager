@@ -1,17 +1,16 @@
 import { GoogleSpreadsheet } from "google-spreadsheet";
 import { JWT } from "google-auth-library";
 import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import {
   checkBudgetWarning,
   getMonthlyReport,
   parseAmountString,
   parseIDR,
 } from "@/lib/finance";
+import { getGeminiClient } from "@/lib/gemini";
 
 // --- CONFIG ---
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-import { getGeminiClient } from "@/lib/gemini";
 
 const getDoc = async () => {
   const serviceAccountAuth = new JWT({
@@ -21,7 +20,7 @@ const getDoc = async () => {
   });
   const doc = new GoogleSpreadsheet(
     process.env.GOOGLE_SHEET_ID!,
-    serviceAccountAuth
+    serviceAccountAuth,
   );
   await doc.loadInfo();
   return doc;
@@ -65,7 +64,7 @@ function parseMessage(message: string) {
   // 2. Normal Mode
   let tipe = "Keluar";
   const tipeIndex = parts.findIndex((p) =>
-    ["masuk", "keluar"].includes(p.toLowerCase())
+    ["masuk", "keluar"].includes(p.toLowerCase()),
   );
   if (tipeIndex !== -1) {
     tipe = parts[tipeIndex].toLowerCase() === "masuk" ? "Masuk" : "Keluar";
@@ -100,18 +99,17 @@ const toIDR = (num: number) => {
 };
 
 // --- HELPER AI CHAT ---
-// --- HELPER AI CHAT ---
 async function getAIReply(
   userMessage: string,
   context: "chat" | "transaction_success" | "report" | "list" = "chat",
-  data?: string
+  data?: string,
 ) {
   try {
     const genAI = getGeminiClient();
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
       systemInstruction:
-        "Kamu adalah asisten keuangan pribadi yang lucu, cerdas, dan suportif. Namamu adalah 'Asisten Pribadi'. Gaya bicaramu santai, gaul (bahasa sehari-hari Indonesia, bahasa jawa dan sedikit english), dan sering pakai emoji. Tugasmu mencatat keuangan dan menemani user curhat soal duit. Kalau user boros, tegur dengan jenaka. Kalau hemat, puji mereka. Jangan lupakan konteks bahwa ini adalah aplikasi pencatat keuangan.",
+        "Kamu adalah asisten keuangan pribadi yang lucu, cerdas, dan suportif. Namamu adalah 'Sekretaris Pribadi'. Gaya bicaramu santai, gaul (bahasa sehari-hari Indonesia, bahasa jawa dan sedikit english), dan sering pakai emoji. Tugasmu mencatat keuangan dan menemani user curhat soal duit. Kalau user boros, tegur dengan jenaka. Kalau hemat, puji mereka. Jangan lupakan konteks bahwa ini adalah aplikasi pencatat keuangan. PENTING: Gunakan hanya SATU tanda bintang (*) untuk menebalkan teks penting (contoh: *Transportasi*). JANGAN GUNAKAN dua bintang (**).",
     });
 
     let prompt = "";
@@ -146,7 +144,7 @@ async function getAIReply(
         `;
     } else {
       // Context Chat Normal
-      prompt = `User berkata: "${userMessage}". Jawablah dengan panggilan bos muda keturunan kaisar china tapi harus tetap relevan. Jika mereka bertanya soal fitur bot, jelaskan cara pakainya (Format: "Saldo" (Cek Saldo)\n- Tagihan (List Tagihan)\n- Kategori (List Kategori)\n- Keluar BNI 15000 Makanan Bakso (Catat + Kategori)\n- Transfer BNI Mandiri 15000 (Transfer)\n- Masuk BNI 15000 Bakso (Catat)\n- Bayar Listrik 30000 Gopay (Bayar Tagihan)\n- Done Wifi (Bayar Tagihan)\n- Laporan (Laporan Bulanan)).`;
+      prompt = `User berkata: "${userMessage}". Jawablah dengan panggilan bos muda keturunan kaisar china atau yang mulia tapi harus tetap relevan. Jika mereka bertanya soal fitur bot, jelaskan cara pakainya (Format: "Saldo" (Cek Saldo)\n- Tagihan (List Tagihan)\n- Kategori (List Kategori)\n- Keluar BNI 15000 Makanan Bakso (Catat + Kategori)\n- Transfer BNI Mandiri 15000 (Transfer)\n- Masuk BNI 15000 Bakso (Catat)\n- Bayar Listrik 30000 Gopay (Bayar Tagihan)\n- Done Wifi (Bayar Tagihan)\n- Laporan (Laporan Bulanan)).`;
     }
 
     const result = await model.generateContent(prompt);
@@ -177,7 +175,7 @@ async function replyTelegram(chatId: string | number, message: string) {
   const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
   try {
     console.log(
-      `📤 Sending Telegram message to ${chatId}: ${message.substring(0, 50)}...`
+      `📤 Sending Telegram message to ${chatId}: ${message.substring(0, 50)}...`,
     );
 
     // Force Plain Text for debugging purposes
@@ -226,7 +224,7 @@ export async function POST(req: Request) {
 
         // 2. Dapatkan URL File dari Telegram
         const fileRes = await fetch(
-          `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`
+          `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`,
         );
         const fileData = await fileRes.json();
         const filePath = fileData.result.file_path;
@@ -293,8 +291,8 @@ export async function POST(req: Request) {
           "",
           "transaction_success",
           `Pengeluaran di ${dataStruk.merchant} sebesar ${toIDR(
-            Number(dataStruk.total)
-          )} untuk kategori ${dataStruk.kategori} pake ${defaultDompet}.`
+            Number(dataStruk.total),
+          )} untuk kategori ${dataStruk.kategori} pake ${defaultDompet}.`,
         );
         await replyTelegram(chatId, aiReply);
       } catch (error: any) {
@@ -304,7 +302,7 @@ export async function POST(req: Request) {
 
         await replyTelegram(
           chatId,
-          `❌ ${errorMessage}\n\nTip: Pastikan gambarnya jelas atau coba input manual aja bro.`
+          `❌ ${errorMessage}\n\nTip: Pastikan gambarnya jelas atau coba input manual aja bro.`,
         );
       }
 
@@ -381,7 +379,7 @@ export async function POST(req: Request) {
         const aiReply = await getAIReply(
           "",
           "list",
-          "Semua tagihan bulan ini SUDAH LUNAS. Aman terkendali."
+          "Semua tagihan bulan ini SUDAH LUNAS. Aman terkendali.",
         );
         await replyTelegram(chatId, aiReply);
       } else {
@@ -421,7 +419,7 @@ export async function POST(req: Request) {
 
     // 3. BAYAR TAGIHAN EXPENSE (VARIABLE)
     const payExpenseMatch = lowerMsg.match(
-      /^(?:bayar|lunas|done)\s+(.+?)\s+([0-9.,]+[a-zA-Z]*)\s+(.+)$/
+      /^(?:bayar|lunas|done)\s+(.+?)\s+([0-9.,]+[a-zA-Z]*)\s+(.+)$/,
     );
 
     if (payExpenseMatch) {
@@ -471,8 +469,8 @@ export async function POST(req: Request) {
         await replyTelegram(
           chatId,
           `✅ *TAGIHAN LUNAS & TERCATAT!*\n\n🧾 Tagihan: ${actualName}\n💰 Nominal: ${toIDR(
-            Number(amount)
-          )}\n💸 Sumber: ${walletName}`
+            Number(amount),
+          )}\n💸 Sumber: ${walletName}`,
         );
       } else {
         await replyTelegram(chatId, `❌ Gak nemu tagihan "${targetName}" bro.`);
@@ -513,7 +511,7 @@ export async function POST(req: Request) {
 
         await replyTelegram(
           chatId,
-          `✅ Mantab bos! *${actualName}* udah LUNAS bulan ini (${todayStr}).`
+          `✅ Mantab bos! *${actualName}* udah LUNAS bulan ini (${todayStr}).`,
         );
       } else {
         await replyTelegram(chatId, `❌ Gak nemu tagihan "${targetName}" bro.`);
@@ -637,12 +635,34 @@ export async function POST(req: Request) {
         },
       ]);
 
+      // --- VERIFICATION STEP ---
+      const freshRows = await sheet.getRows({
+        limit: 5,
+        offset: sheet.rowCount - 6,
+      });
+      const lastRow = freshRows[freshRows.length - 1];
+      const secondLastRow = freshRows[freshRows.length - 2];
+
+      const isVerified =
+        (lastRow.get("Keterangan").includes(toWallet) &&
+          lastRow.get("Jumlah") === jumlah) ||
+        (secondLastRow?.get("Keterangan").includes(toWallet) &&
+          secondLastRow?.get("Jumlah") === jumlah);
+
+      if (!isVerified) {
+        await replyTelegram(
+          chatId,
+          "❌ Gawat bos! Sistem bilang sukses tapi pas dicek ulang datanya GAK ADA di sheet. Tolong input ulang ya! Maapkeun jangan pecat saya🙏",
+        );
+        return NextResponse.json({ ok: true });
+      }
+
       const aiReply = await getAIReply(
         "",
         "transaction_success",
         `Transfer sebesar ${toIDR(
-          Number(jumlah)
-        )} dari ${fromWallet} ke ${toWallet}.`
+          Number(jumlah),
+        )} dari ${fromWallet} ke ${toWallet}.`,
       );
       await replyTelegram(chatId, aiReply);
     } else {
@@ -665,7 +685,7 @@ export async function POST(req: Request) {
           // Match found
           const catRows = await sheetAnggaran?.getRows();
           const matchedRow = catRows?.find(
-            (r) => r.get("Kategori").toLowerCase() === candidate
+            (r) => r.get("Kategori").toLowerCase() === candidate,
           );
           finalKategori = matchedRow ? matchedRow.get("Kategori") : "Lainnya";
 
@@ -686,13 +706,33 @@ export async function POST(req: Request) {
         Kategori: finalKategori,
       });
 
+      // --- VERIFICATION STEP ---
+      const freshRows = await sheet.getRows({
+        limit: 5,
+        offset: sheet.rowCount - 6,
+      });
+      const lastRow = freshRows[freshRows.length - 1];
+
+      const isVerified =
+        lastRow.get("Keterangan") === finalKeterangan &&
+        parseIDR(lastRow.get("Jumlah")) === Number(data.jumlah) &&
+        lastRow.get("Dompet") === data.dompet;
+
+      if (!isVerified) {
+        await replyTelegram(
+          chatId,
+          "❌ Gawat bos! Sistem bilang sukses tapi pas dicek ulang datanya GAK ADA di sheet. Coba input lagi ya!",
+        );
+        return NextResponse.json({ ok: true });
+      }
+
       // --- BUDGET ALERT CHECK ---
       let warningMsg = "";
       if (data.tipe === "Keluar") {
         const alert = await checkBudgetWarning(
           doc,
           finalKategori,
-          Number(data.jumlah)
+          Number(data.jumlah),
         );
         if (alert) warningMsg = alert;
       }
@@ -702,7 +742,7 @@ export async function POST(req: Request) {
         "transaction_success",
         `${data.tipe} sebesar ${toIDR(Number(data.jumlah))} di dompet ${
           data.dompet
-        } untuk kategori ${finalKategori}. Keterangan: ${finalKeterangan}. ${warningMsg}`
+        } untuk kategori ${finalKategori}. Keterangan: ${finalKeterangan}. ${warningMsg}`,
       );
       await replyTelegram(chatId, aiReply);
     }

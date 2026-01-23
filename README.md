@@ -8,6 +8,10 @@ A personal finance tracking application built with **Next.js**, using **Google S
 ## ✨ Features
 
 - **Dashboard**: Visual overview of income, expenses, and wallet balances.
+- **AI Smart Assistant** 🤖:
+  - Smart replies via WhatsApp.
+  - Transaction feedback/insights.
+  - Powered by **Google Gemini**.
 - **In-App Data Management** 🛠️:
   - Manage **Wallets** (e.g. BNI, Gopay)
   - Set **Budgets** per category
@@ -33,6 +37,7 @@ Follow these instructions to get the project running on your local machine.
 - [npm](https://www.npmjs.com/) or yarn
 - A Google Cloud Project with **Google Sheets API** enabled
 - A Telegram Account (for bot integration)
+- A **Google AI Studio** API Key (for Gemini)
 
 ### Installation
 
@@ -69,6 +74,7 @@ Follow these instructions to get the project running on your local machine.
     | `FONNTE_TOKEN` | (Optional) Token for WhatsApp integration via Fonnte |
     | `WHATSAPP_NUMBER` | (Optional) Target WhatsApp number for notifications |
     | `NEXT_PUBLIC_ACCESS_PIN` | PIN code to access the web dashboard (e.g. `123456`) |
+    | `GEMINI_API_KEY` | **Google (Gemini) API Key**. Get it from [Google AI Studio](https://aistudio.google.com/) |
 
 ### Google Sheets Setup
 
@@ -88,6 +94,7 @@ If you prefer to set up everything manually:
 
 - [**SETUP_WALLETS.md**](SETUP_WALLETS.md) - For Wallet configuration.
 - [**SETUP_AUTO_DEBIT.md**](SETUP_AUTO_DEBIT.md) - For Auto-Debit configuration (**Manual Setup Required**).
+- [**SETUP_AI.md**](SETUP_AI.md) - For configuring Gemini API and Persona.
 
 ---
 

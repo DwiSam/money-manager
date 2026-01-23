@@ -248,18 +248,21 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     <input
                       className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-sm font-mono focus:ring-2 focus:ring-blue-500/50 outline-none"
                       placeholder="1000000"
-                      value={budgetForm.limit}
+                      type="number"
+                      inputMode="decimal"
+                      value={
+                        budgetForm.limit
+                          ? new Intl.NumberFormat("id-ID").format(
+                              Number(budgetForm.limit),
+                            )
+                          : ""
+                      }
                       onChange={(e) => {
                         const val = e.target.value.replace(/\D/g, "");
                         setBudgetForm({ ...budgetForm, limit: val });
                       }}
                       required
                     />
-                    {budgetForm.limit && (
-                      <p className="text-xs text-neutral-500 text-right">
-                        Rp {formatRupiah(budgetForm.limit)}
-                      </p>
-                    )}
                   </div>
                 </div>
                 <div className="flex justify-end gap-2">
@@ -400,18 +403,26 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                       <input
                         className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-sm font-mono focus:ring-2 focus:ring-emerald-500/50 outline-none"
                         placeholder="0 (Jika variabel)"
-                        value={billForm.jumlah}
+                        type="number"
+                        inputMode="decimal"
+                        value={
+                          billForm.jumlah
+                            ? new Intl.NumberFormat("id-ID").format(
+                                Number(billForm.jumlah),
+                              )
+                            : ""
+                        }
                         onChange={(e) => {
                           const val = e.target.value.replace(/\D/g, "");
                           setBillForm({ ...billForm, jumlah: val });
                         }}
                         required
                       />
-                      <p className="text-xs text-neutral-500 text-right">
-                        {billForm.jumlah &&
-                          `Rp ${formatRupiah(billForm.jumlah)}`}
-                        {billForm.jumlah === "0" && " (Menyesuaikan)"}
-                      </p>
+                      {billForm.jumlah === "0" && (
+                        <p className="text-xs text-neutral-500 text-right">
+                          (Menyesuaikan)
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -422,6 +433,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                     {billType === "Rutin" ? (
                       <input
                         type="number"
+                        inputMode="numeric"
                         min="1"
                         max="31"
                         className="w-full bg-neutral-900 border border-neutral-700 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-emerald-500/50 outline-none"

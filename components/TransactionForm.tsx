@@ -190,7 +190,7 @@ export default function TransactionForm({
             onChange={(e) => setForm({ ...form, kategori: e.target.value })}
           >
             {categories.length === 0 ? (
-              <option value="Lainnya">Lainnya</option>
+              <option value="Transfer">Transfer</option>
             ) : (
               categories.map((cat) => (
                 <option key={cat} value={cat}>
@@ -207,7 +207,8 @@ export default function TransactionForm({
           Jumlah (Rp)
         </label>
         <input
-          type="text"
+          type="number"
+          inputMode="decimal"
           placeholder="0"
           className="w-full p-3 bg-neutral-950 border border-neutral-800 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-neutral-700 font-mono"
           value={

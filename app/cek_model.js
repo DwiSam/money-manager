@@ -1,7 +1,7 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 // PASTIKAN API KEY BENAR
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = new GoogleGenerativeAI(your_gemini_api_key);
 
 async function checkModels() {
   const candidates = [

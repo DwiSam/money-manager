@@ -92,7 +92,7 @@ export async function PUT(req: Request) {
 
     // Find row by index (GoogleSpreadsheet rowIndex is 1-based usually matched with rows[i].rowIndex)
     // @ts-ignore
-    const row = rows.find((r) => r.rowIndex === rowIndex);
+    const row = rows.find((r) => r.rowNumber === rowIndex);
 
     if (!row) {
       return NextResponse.json({ error: "Row not found" }, { status: 404 });
@@ -129,7 +129,7 @@ export async function DELETE(req: Request) {
     const rows = await sheet.getRows();
 
     // @ts-ignore
-    const row = rows.find((r) => r.rowIndex === rowIndex);
+    const row = rows.find((r) => r.rowNumber === rowIndex);
 
     if (!row) {
       return NextResponse.json({ error: "Row not found" }, { status: 404 });

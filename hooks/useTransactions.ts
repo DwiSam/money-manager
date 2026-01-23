@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import { useToast } from "@/components/ToastProvider";
 
 export function useTransactions() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const { showToast } = useToast();
 
   const fetchData = async () => {
     try {
@@ -13,12 +15,15 @@ export function useTransactions() {
 
       if (Array.isArray(json)) {
         setData(json);
+        return json;
       } else {
         console.error("API returned invalid format:", json);
         setData([]);
+        return [];
       }
     } catch (error) {
       console.error("Failed to fetch data", error);
+      return [];
     }
   };
 
@@ -87,19 +92,24 @@ export function useTransactions() {
           throw new Error(`Gagal ke API: ${response.status}`);
         }
 
-        const result = await response.json();
-        console.log("🎉 Transfer sukses tersimpan sekaligus!", result);
+        // VERIFICATION: Fetch data again and check if it exists
+        const freshData = await fetchData();
+        const exists = freshData.some(
+          (item: any) =>
+            item.keterangan === outgoingTransaction.keterangan &&
+            item.jumlah === outgoingTransaction.jumlah,
+        );
+
+        if (!exists) {
+          throw new Error("Data tidak ditemukan saat verifikasi ulang sheet");
+        }
+
+        showToast("Transfer berhasil disimpan", "success");
+        console.log("🎉 Transfer sukses tersimpan & terverifikasi!");
       } catch (error) {
         console.error("❌ Error during transfer:", error);
-        console.error("Error details:", {
-          message: error instanceof Error ? error.message : "Unknown error",
-          stack: error instanceof Error ? error.stack : undefined,
-        });
-        alert(
-          `Gagal menyimpan transfer: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`,
-        );
+        showToast("Gagal menyimpan transfer data", "error");
+
         // Rollback
         setData((prev) =>
           prev.filter(
@@ -138,19 +148,24 @@ export function useTransactions() {
           throw new Error(`Gagal ke API: ${response.status}`);
         }
 
-        const result = await response.json();
-        console.log("✅ Transaction saved!", result);
+        // VERIFICATION: Fetch data again and check if it exists
+        const freshData = await fetchData();
+        const exists = freshData.some(
+          (item: any) =>
+            item.keterangan === newItem.keterangan &&
+            item.jumlah === newItem.jumlah &&
+            item.tanggal === newItem.tanggal,
+        );
+
+        if (!exists) {
+          throw new Error("Data tidak ditemukan saat verifikasi ulang sheet");
+        }
+
+        showToast("Transaksi berhasil disimpan", "success");
+        console.log("✅ Transaction saved & verified!");
       } catch (error) {
         console.error("Error bro:", error);
-        console.error("Error details:", {
-          message: error instanceof Error ? error.message : "Unknown error",
-          stack: error instanceof Error ? error.stack : undefined,
-        });
-        alert(
-          `Gagal menyimpan: ${
-            error instanceof Error ? error.message : "Unknown error"
-          }`,
-        );
+        showToast("Gagal menyimpan transaksi", "error");
         setData((prev) => prev.filter((item) => item !== newItem));
       } finally {
         setLoading(false);
@@ -186,16 +201,18 @@ export function useTransactions() {
 
       // Refetch to ensure sync
       await fetchData();
+      showToast("Data berhasil diupdate", "success");
     } catch (error) {
       console.error("Update error:", error);
-      alert("Gagal update transaksi");
+      showToast("Gagal update transaksi", "error");
     } finally {
       setLoading(false);
     }
   };
 
   const deleteTransaction = async (rowIndex: number) => {
-    if (!confirm("Yakin ingin menghapus transaksi ini?")) return;
+    // Confirmation handled by UI Modal now
+    // if (!confirm("Yakin ingin menghapus transaksi ini?")) return;
     setLoading(true);
 
     try {
@@ -209,9 +226,10 @@ export function useTransactions() {
 
       // Optimistic update or Refetch
       setData((prev) => prev.filter((item) => item.rowIndex !== rowIndex));
+      showToast("Data berhasil dihapus", "success");
     } catch (error) {
       console.error("Delete error:", error);
-      alert("Gagal hapus transaksi");
+      showToast("Gagal hapus transaksi", "error");
     } finally {
       setLoading(false);
     }

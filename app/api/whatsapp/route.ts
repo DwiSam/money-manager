@@ -5,14 +5,13 @@ import {
   checkBudgetWarning,
   getMonthlyReport,
   parseAmountString,
-  parseIDR, // Import parseIDR
+  parseIDR,
 } from "@/lib/finance";
 import { getGeminiClient } from "@/lib/gemini";
 
 // --- CONFIG ---
 const FONNTE_TOKEN = process.env.FONNTE_TOKEN;
 
-// --- HELPER AI CHAT ---
 // --- HELPER AI CHAT ---
 async function getAIReply(
   userMessage: string,
@@ -24,7 +23,7 @@ async function getAIReply(
     const model = genAI.getGenerativeModel({
       model: "gemini-2.5-flash",
       systemInstruction:
-        "Kamu adalah asisten keuangan pribadi yang lucu, cerdas, dan suportif. Namamu adalah 'Asisten Pribadi'. Gaya bicaramu santai, gaul (bahasa sehari-hari Indonesia, bahasa jawa dan sedikit english), dan sering pakai emoji. Tugasmu mencatat keuangan dan menemani user curhat soal duit. Kalau user boros, tegur dengan jenaka. Kalau hemat, puji mereka. Jangan lupakan konteks bahwa ini adalah aplikasi pencatat keuangan.",
+        "Kamu adalah asisten keuangan pribadi yang lucu, cerdas, dan suportif. Namamu adalah 'Sekretaris Pribadi'. Gaya bicaramu santai, gaul (bahasa sehari-hari Indonesia, bahasa jawa dan sedikit english), dan sering pakai emoji. Tugasmu mencatat keuangan dan menemani user curhat soal duit. Kalau user boros, tegur dengan jenaka. Kalau hemat, puji mereka. Jangan lupakan konteks bahwa ini adalah aplikasi pencatat keuangan. PENTING: Gunakan hanya SATU tanda bintang (*) untuk menebalkan teks penting (contoh: *Transportasi*). JANGAN GUNAKAN dua bintang (**).",
     });
 
     let prompt = "";
@@ -59,7 +58,7 @@ async function getAIReply(
         `;
     } else {
       // Context Chat Normal
-      prompt = `User berkata: "${userMessage}". Jawablah dengan panggilan bos muda keturunan kaisar china tapi harus tetap relevan. Jika mereka bertanya soal fitur bot, jelaskan cara pakainya (Format: "Saldo" (Cek Saldo)\n- Tagihan (List Tagihan)\n- Kategori (List Kategori)\n- Keluar BNI 15000 Makanan Bakso (Catat + Kategori)\n- Transfer BNI Mandiri 15000 (Transfer)\n- Masuk BNI 15000 Bakso (Catat)\n- Bayar Listrik 30000 Gopay (Bayar Tagihan)\n- Done Wifi (Bayar Tagihan)\n- Laporan (Laporan Bulanan)).`;
+      prompt = `User berkata: "${userMessage}". Jawablah dengan panggilan bos muda keturunan kaisar china atau yang mulia tapi harus tetap relevan. Jika mereka bertanya soal fitur bot, jelaskan cara pakainya (Format: "Saldo" (Cek Saldo)\n- Tagihan (List Tagihan)\n- Kategori (List Kategori)\n- Keluar BNI 15000 Makanan Bakso (Catat + Kategori)\n- Transfer BNI Mandiri 15000 (Transfer)\n- Masuk BNI 15000 Bakso (Catat)\n- Bayar Listrik 30000 Gopay (Bayar Tagihan)\n- Done Wifi (Bayar Tagihan)\n- Laporan (Laporan Bulanan)).`;
     }
 
     const result = await model.generateContent(prompt);
@@ -625,6 +624,28 @@ export async function POST(req: Request) {
         },
       ]);
 
+      // --- VERIFICATION STEP ---
+      const freshRows = await sheet.getRows({
+        limit: 5,
+        offset: sheet.rowCount - 6,
+      }); // Get last few rows
+      const lastRow = freshRows[freshRows.length - 1];
+      const secondLastRow = freshRows[freshRows.length - 2];
+
+      const isVerified =
+        (lastRow.get("Keterangan").includes(toWallet) &&
+          lastRow.get("Jumlah") === data.jumlah) ||
+        (secondLastRow?.get("Keterangan").includes(toWallet) &&
+          secondLastRow?.get("Jumlah") === data.jumlah);
+
+      if (!isVerified) {
+        await replyFonnte(
+          sender,
+          "❌ Gawat bos! Sistem bilang sukses tapi pas dicek ulang datanya GAK ADA di sheet. Tolong input ulang ya! Maapkeun jangan pecat saya🙏",
+        );
+        return NextResponse.json({ status: "verification_failed" });
+      }
+
       // 🤖 AI REPLY TRANSFER
       const aiReply = await getAIReply(
         "",
@@ -681,6 +702,28 @@ export async function POST(req: Request) {
         Keterangan: finalKeterangan,
         Kategori: finalKategori,
       });
+
+      // --- VERIFICATION STEP ---
+      const freshRows = await sheet.getRows({
+        limit: 5,
+        offset: sheet.rowCount - 6,
+      }); // Get last few rows relatively efficient
+      // Note: offset might be tricky if rows are deleted. Safer to just get last few rows without offset if rowCount is unreliable,
+      // but rowCount is usually fine. Let's just grab the last row.
+      const lastRow = freshRows[freshRows.length - 1];
+
+      const isVerified =
+        lastRow.get("Keterangan") === finalKeterangan &&
+        parseIDR(lastRow.get("Jumlah")) === Number(data.jumlah) &&
+        lastRow.get("Dompet") === data.dompet;
+
+      if (!isVerified) {
+        await replyFonnte(
+          sender,
+          "❌ Gawat bos! Sistem bilang sukses tapi pas dicek ulang datanya GAK ADA di sheet. Coba input lagi ya!",
+        );
+        return NextResponse.json({ status: "verification_failed" });
+      }
 
       // --- BUDGET ALERT CHECK ---
       let warningMsg = "";

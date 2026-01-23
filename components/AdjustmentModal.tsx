@@ -96,8 +96,18 @@ export default function AdjustmentModal({
               </span>
               <input
                 type="number"
-                value={actualBalance}
-                onChange={(e) => setActualBalance(e.target.value)}
+                inputMode="decimal"
+                value={
+                  actualBalance
+                    ? new Intl.NumberFormat("id-ID").format(
+                        Number(actualBalance.replace(/[^0-9]/g, "")),
+                      )
+                    : ""
+                }
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, "");
+                  setActualBalance(val);
+                }}
                 className="w-full bg-neutral-800 border border-neutral-700 rounded-xl py-3 pl-10 pr-4 text-white placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 text-lg font-mono"
                 placeholder="0"
                 autoFocus
